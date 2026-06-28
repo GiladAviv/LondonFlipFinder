@@ -1,13 +1,13 @@
 # 🇬🇧 London Flip Finder: Advanced Real Estate Valuation Model
 
-## 📌 Overview
+## Overview
 This project aims to identify highly profitable real estate investment opportunities (Flips) in the London housing market. By building a robust machine learning valuation model (using **XGBoost**), the system calculates the true fair market value of properties based on their physical characteristics, spatial data, macro-economic indicators, and neighborhood safety metrics. 
 
 Properties where the actual market asking price (or API estimate) is significantly lower than our model's predicted value are flagged as potential "Flips".
 
 ---
 
-## 🏗️ Complex Data Fusion Architecture
+## Complex Data Fusion Architecture
 One of the core strengths of this project is the integration of multiple, disparate data sources into a single unified dataset using advanced joins:
 
 1. **Spatial Join:**
@@ -23,7 +23,7 @@ One of the core strengths of this project is the integration of multiple, dispar
 
 ---
 
-## 🧹 Data Cleaning & Imputation Strategy
+## Data Cleaning & Imputation Strategy
 Handling missing values in real estate data requires a methodical approach to avoid signal distortion:
 
 * **Macro & Environmental Imputation (Median):** Missing values in the merged crime datasets (e.g., `crime_volume_prev_12m`) were imputed using the **Median** of the dataset. This ensures that properties sold in fringe dates or edge-case locations do not crash the model, while avoiding the skewness that a mean imputation might cause due to highly anomalous neighborhoods.
@@ -33,33 +33,25 @@ Handling missing values in real estate data requires a methodical approach to av
 
 ---
 
-## 📊 Data Dictionary (Key Features)
+## Data Dictionary (Key Features)
 
-### 🎯 Target Variable
+### Target Variable
 * `price`: The actual historical transaction price of the property (in £).
 
-### 📍 Spatial & Location Features
+### Spatial & Location Features
 * `borough`: The official London municipal borough (Extracted via Spatial Join).
 * `distance_to_nearest_tube_m`: The exact distance in meters to the closest London Underground station (Calculated using Scipy's `cKDTree`).
 * `latitude` / `longitude`: Exact geographical coordinates.
 * `outcode`: The first half of the UK postcode, representing the general district.
 
-### 🏠 Physical Property Features
+### Physical Property Features
 * `floorAreaSqM`: The internal built area of the property in square meters.
 * `total_rooms`: Engineered feature summing `bedrooms` and `livingRooms`.
 * `propertyType`: The architectural type of the property (e.g., Flat, Terraced House, Detached).
 * `tenure`: The legal ownership type (Freehold vs. Leasehold).
 
-### 🌍 Environmental & Macro-Economic Features
+### Environmental & Macro-Economic Features
 * `crime_volume_prev_12m`: The total reported crime events in the property's borough during the 12 full months strictly preceding the sale month.
 * `interest_rate`: The official Bank of England interest rate on the exact day of the transaction.
 
-### 🤖 API Market Estimates (For Flip Identification)
-* `saleEstimate_currentPrice`: The current estimated market value provided by the external Real Estate API (Used as the baseline to compare against our model's valuation).
-* `rentEstimate_currentPrice`: Estimated monthly rental income (Useful for Yield/ROI calculations).
 
----
-
-## 🚀 Next Steps
-1. **Model Training:** Training an XGBoost regressor with Conformal Prediction to output price ranges with a 90% confidence interval.
-2. **Flip Identification:** Running the current API listings through the model to extract properties where: `Predicted Value > (API Estimate + Renovation Margin)`.
