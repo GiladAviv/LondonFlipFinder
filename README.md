@@ -1,15 +1,4 @@
 # 🏙️ London Flip Finder
-### A Spatial Machine Learning Framework for Residential Property Valuation and Investment Opportunity Discovery
-
-![Python](https://img.shields.io/badge/Python-3.11-blue)
-![XGBoost](https://img.shields.io/badge/XGBoost-Machine%20Learning-green)
-![CatBoost](https://img.shields.io/badge/CatBoost-Gradient%20Boosting-orange)
-![GeoPandas](https://img.shields.io/badge/GeoPandas-Spatial%20Analysis-success)
-![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-ML-red)
-![Google Colab](https://img.shields.io/badge/Google-Colab-F9AB00)
-![Status](https://img.shields.io/badge/Status-Completed-brightgreen)
-
----
 
 # Overview
 
@@ -38,7 +27,6 @@ This project aims to answer several practical questions:
 The model combines multiple publicly available datasets:
 
 - London Land Registry property transactions
-- Energy Performance Certificate (EPC) data
 - Transport for London (TfL) Underground stations
 - London Borough boundary shapefiles
 - UK postcode geographic data
@@ -60,8 +48,6 @@ Extensive feature engineering was performed across multiple domains.
 - Bathrooms
 - Living rooms
 - Property type
-- Built form
-- Energy efficiency rating
 
 ## Spatial Features
 
@@ -135,19 +121,16 @@ Baseline Ridge Regression
 XGBoost
       │
       ▼
+XGBoost - MOE
+      │
+      ▼
 CatBoost
       │
       ▼
-Mixture of Experts (MoE)
+CatBoost - MOE
       │
       ▼
-Market Filtering (< £4M)
-      │
-      ▼
-Feature Importance Analysis
-      │
-      ▼
-Final Model Evaluation
+Conformal Pradiction
 ```
 
 ---
@@ -261,9 +244,6 @@ London-Flip-Finder/
 
 │── london_flip_finder.ipynb
 │── README.md
-│── requirements.txt
-│
-├── figures/
 │
 └── Releases/
     └── Dataset Package
@@ -277,8 +257,6 @@ Potential future extensions include:
 
 - LightGBM benchmarking
 - Graph Neural Networks
-- Prediction uncertainty estimation
-- Interactive Streamlit dashboard
 - Live property listing integration
 - Automated model retraining pipeline
 
@@ -297,12 +275,9 @@ Potential future extensions include:
 - CatBoost implementation
 - Mixture of Experts (MoE) architecture
 - Feature importance analysis
+- Conformal Pradiction implementation
 - Professional Google Colab workflow
-
 ---
-
-# Author
-
 
 ---
 
