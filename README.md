@@ -1,57 +1,309 @@
-# 🇬🇧 London Flip Finder: Advanced Real Estate Valuation Model
+# 🏙️ London Flip Finder
+### A Spatial Machine Learning Framework for Residential Property Valuation and Investment Opportunity Discovery
 
-## Overview
-This project aims to identify highly profitable real estate investment opportunities (Flips) in the London housing market. By building a robust machine learning valuation model (using **XGBoost**), the system calculates the true fair market value of properties based on their physical characteristics, spatial data, macro-economic indicators, and neighborhood safety metrics. 
-
-Properties where the actual market asking price (or API estimate) is significantly lower than our model's predicted value are flagged as potential "Flips".
-
----
-
-## Complex Data Fusion Architecture
-One of the core strengths of this project is the integration of multiple, disparate data sources into a single unified dataset using advanced joins:
-
-1. **Spatial Join:**
-   * **The Challenge:** The raw property dataset lacked accurate municipal borough identifiers, which are crucial for merging neighborhood-level statistics (like crime).
-   * **The Solution:** We downloaded official London Borough Shapefiles (polygons) from Kaggle. Using the exact `latitude` and `longitude` of each property, we performed a point-in-polygon Spatial Join (`gpd.sjoin(predicate='within')`) to precisely map every property to its official borough.
-
-2. **Temporal Join with 1-Month Lag:**
-   * **The Challenge:** Merging monthly crime data with real estate transaction dates without introducing Data Leakage (i.e., using future data to predict the present).
-   * **The Solution:** We engineered a `crime_lag_month` feature. If a property was sold in May 2012, the model merges the total crime volume from *April 2012*. Additionally, a rolling 12-month crime volume feature was merged using this exact lag to capture the neighborhood's stable safety profile.
-
-3. **Exact-Date Macro Join:**
-   * Daily Bank of England (BoE) interest rates were merged using an exact `date` match to reflect the precise cost of borrowing on the day the transaction was closed.
+![Python](https://img.shields.io/badge/Python-3.11-blue)
+![XGBoost](https://img.shields.io/badge/XGBoost-Machine%20Learning-green)
+![CatBoost](https://img.shields.io/badge/CatBoost-Gradient%20Boosting-orange)
+![GeoPandas](https://img.shields.io/badge/GeoPandas-Spatial%20Analysis-success)
+![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-ML-red)
+![Google Colab](https://img.shields.io/badge/Google-Colab-F9AB00)
+![Status](https://img.shields.io/badge/Status-Completed-brightgreen)
 
 ---
 
-## Data Cleaning & Imputation Strategy
-Handling missing values in real estate data requires a methodical approach to avoid signal distortion:
+# Overview
 
-* **Macro & Environmental Imputation (Median):** Missing values in the merged crime datasets (e.g., `crime_volume_prev_12m`) were imputed using the **Median** of the dataset. This ensures that properties sold in fringe dates or edge-case locations do not crash the model, while avoiding the skewness that a mean imputation might cause due to highly anomalous neighborhoods.
-* **Strict Feature Engineering (`total_rooms`):** Instead of forcefully filling missing bedroom or living room counts with `0` (which distorts the model by grouping missing data with actual studio apartments), we used strict addition (`bedrooms + livingRooms`). If either value was `NaN`, the sum remained `NaN`.
-* **Algorithmic Imputation (XGBoost Sparsity-Aware Split):** For continuous physical features like exact distance to the Tube or missing `total_rooms`, we intentionally left the values as `NaN`. XGBoost natively handles missing data by learning the optimal default split direction, preventing the introduction of synthetic bias.
-* **Information Threshold Filtering:** Rows lacking the absolute minimum critical physical data (specifically, missing *both* `floorAreaSqM` and `total_rooms`) were dropped (`dropna(how='all')`), as they act as "black boxes" that add noise rather than predictive power.
+**London Flip Finder** is an end-to-end machine learning project for predicting residential property prices across London using spatial, temporal, economic, and property-specific information.
+
+The project integrates multiple public datasets with advanced feature engineering to build a robust property valuation model. Several machine learning approaches—including linear regression, gradient boosting, and Mixture of Experts (MoE)—were developed and compared to investigate how specialized models can improve prediction accuracy across different segments of the housing market.
+
+The notebook follows a complete real-world data science workflow, from raw data collection and preprocessing to model evaluation and interpretation.
 
 ---
 
-## Data Dictionary (Key Features)
+# Project Objectives
 
-### Target Variable
-* `price`: The actual historical transaction price of the property (in £).
+This project aims to answer several practical questions:
 
-### Spatial & Location Features
-* `borough`: The official London municipal borough (Extracted via Spatial Join).
-* `distance_to_nearest_tube_m`: The exact distance in meters to the closest London Underground station (Calculated using Scipy's `cKDTree`).
-* `latitude` / `longitude`: Exact geographical coordinates.
-* `outcode`: The first half of the UK postcode, representing the general district.
+- How accurately can London residential property prices be predicted?
+- How much do geographic and spatial features improve model performance?
+- Can specialized machine learning models outperform traditional regression models?
+- Does separating different market segments improve predictive accuracy?
+- Which factors contribute most to property prices?
 
-### Physical Property Features
-* `floorAreaSqM`: The internal built area of the property in square meters.
-* `total_rooms`: Engineered feature summing `bedrooms` and `livingRooms`.
-* `propertyType`: The architectural type of the property (e.g., Flat, Terraced House, Detached).
-* `tenure`: The legal ownership type (Freehold vs. Leasehold).
+---
 
-### Environmental & Macro-Economic Features
-* `crime_volume_prev_12m`: The total reported crime events in the property's borough during the 12 full months strictly preceding the sale month.
-* `interest_rate`: The official Bank of England interest rate on the exact day of the transaction.
+# Data Sources
+
+The model combines multiple publicly available datasets:
+
+- London Land Registry property transactions
+- Energy Performance Certificate (EPC) data
+- Transport for London (TfL) Underground stations
+- London Borough boundary shapefiles
+- UK postcode geographic data
+- Crime statistics
+- Bank of England interest rates
+
+These datasets are spatially joined to create a rich property-level machine learning dataset.
+
+---
+
+# Feature Engineering
+
+Extensive feature engineering was performed across multiple domains.
+
+## Property Features
+
+- Floor area
+- Bedrooms
+- Bathrooms
+- Living rooms
+- Property type
+- Built form
+- Energy efficiency rating
+
+## Spatial Features
+
+- Distance to nearest Underground station
+- Borough assignment
+- Geographic coordinates
+- Neighborhood characteristics
+
+## Crime Features
+
+- Previous-month crime counts
+- Rolling 12-month crime totals
+
+## Economic Features
+
+- Bank of England base interest rate
+- Historical housing market trends
+
+## Temporal Features
+
+- Transaction year
+- Cyclical month encoding
+- Lagged rolling median property prices
+
+All temporal features were carefully engineered to prevent data leakage.
+
+---
+
+# Exploratory Data Analysis
+
+The notebook includes extensive exploratory analysis covering:
+
+- Property price distributions
+- Price per square meter
+- Property type comparisons
+- Borough-level price differences
+- Floor area versus price
+- Distance-to-Tube premium
+- Crime impact analysis
+- Interest rate effects
+- Correlation analysis
+
+These analyses guided the feature engineering process and model selection.
+
+---
+
+# Machine Learning Pipeline
+
+```
+Raw Data
+      │
+      ▼
+Data Cleaning
+      │
+      ▼
+Spatial Data Integration
+      │
+      ▼
+Feature Engineering
+      │
+      ▼
+Exploratory Data Analysis
+      │
+      ▼
+Chronological Train / Validation / Test Split
+      │
+      ▼
+Baseline Ridge Regression
+      │
+      ▼
+XGBoost
+      │
+      ▼
+CatBoost
+      │
+      ▼
+Mixture of Experts (MoE)
+      │
+      ▼
+Market Filtering (< £4M)
+      │
+      ▼
+Feature Importance Analysis
+      │
+      ▼
+Final Model Evaluation
+```
+
+---
+
+# Machine Learning Models
+
+Several predictive models were implemented and compared throughout the project.
+
+## Ridge Regression
+
+A linear baseline model used to establish benchmark performance.
+
+## XGBoost
+
+The primary gradient boosting model featuring:
+
+- Log-transformed target values
+- Early stopping
+- Native categorical feature handling
+- Chronological validation strategy
+
+## CatBoost
+
+CatBoost was evaluated as an alternative gradient boosting algorithm with native categorical encoding capabilities, providing a strong benchmark against XGBoost.
+
+## Mixture of Experts (MoE)
+
+To further improve prediction accuracy, a **Mixture of Experts (MoE)** architecture was implemented.
+
+Instead of relying on a single global model, specialized expert models were trained for different market segments, allowing each expert to focus on a subset of the housing market. The gating strategy routes each property to the most appropriate expert, improving predictive performance on heterogeneous data.
+
+---
+
+# Data Cleaning
+
+Several preprocessing strategies were evaluated, including:
+
+- Missing value handling
+- Geographic validation
+- Temporal alignment
+- Luxury property filtering
+- Feature normalization
+- Leakage prevention through lagged variables
+
+Filtering extreme luxury properties (> £4M) was also investigated to improve overall model robustness.
+
+---
+
+# Model Evaluation
+
+Models were evaluated using multiple performance metrics:
+
+- Mean Absolute Error (MAE)
+- Root Mean Squared Error (RMSE)
+- Mean Absolute Percentage Error (MAPE)
+- R² Score
+
+Additional diagnostics include:
+
+- Residual analysis
+- Prediction error visualization
+- Feature importance analysis
+- Model comparison
+
+---
+
+# Technologies
+
+- Python
+- Pandas
+- NumPy
+- GeoPandas
+- Shapely
+- SciPy (cKDTree)
+- Scikit-Learn
+- XGBoost
+- CatBoost
+- Matplotlib
+- Seaborn
+
+---
+
+# Running the Project
+
+The notebook is fully configured to run in **Google Colab**.
+
+## Dataset
+
+Due to GitHub's file size limitations, the datasets are **not stored directly inside the repository**.
+
+Instead, they are available in the repository's **Releases** section.
+
+## Setup
+
+1. Download the latest dataset package from **GitHub Releases**.
+2. Extract the downloaded archive.
+3. Upload the dataset folder to your **Google Drive**.
+4. Open `london_flip_finder.ipynb` in Google Colab.
+5. Mount your Google Drive.
+6. Update the dataset path if necessary.
+7. Run the notebook from top to bottom.
+
+> **Note:** The notebook expects all datasets to be stored in Google Drive. Running the notebook without downloading the dataset package from the **Releases** section will result in missing file errors.
+
+---
+
+# Repository Structure
+
+```
+London-Flip-Finder/
+
+│── london_flip_finder.ipynb
+│── README.md
+│── requirements.txt
+│
+├── figures/
+│
+└── Releases/
+    └── Dataset Package
+```
+
+---
+
+# Future Improvements
+
+Potential future extensions include:
+
+- LightGBM benchmarking
+- Graph Neural Networks
+- Prediction uncertainty estimation
+- Interactive Streamlit dashboard
+- Live property listing integration
+- Automated model retraining pipeline
+
+---
+
+# Key Highlights
+
+- End-to-end machine learning workflow
+- Multi-source spatial data integration
+- Advanced geospatial feature engineering
+- Leakage-free temporal features
+- Efficient nearest-station computation using cKDTree
+- Chronological train/validation/test splitting
+- Ridge Regression baseline
+- XGBoost implementation
+- CatBoost implementation
+- Mixture of Experts (MoE) architecture
+- Feature importance analysis
+- Professional Google Colab workflow
+
+---
+
+# Author
 
 
+---
+
+⭐ If you found this project interesting, consider giving the repository a **Star**!
