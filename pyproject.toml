@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "london-flip-finder"
+version = "2.0.0"
+description = "Valuation and mispricing detection for the London residential market (2008-2016)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Gilad Aviv" }]
+keywords = ["real-estate", "geospatial", "gradient-boosting", "conformal-prediction"]
+classifiers = [
+    "Programming Language :: Python :: 3.9",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Intended Audience :: Science/Research",
+]
+
+# Kept in lockstep with requirements.txt, which is the authoritative pinned set.
+dependencies = [
+    "numpy==1.26.4",
+    "pandas==2.3.3",
+    "scipy==1.13.1",
+    "pyarrow==21.0.0",
+    "geopandas==1.0.1",
+    "shapely==2.0.7",
+    "pyproj==3.6.1",
+    "pyogrio==0.11.1",
+    "scikit-learn==1.6.1",
+    "xgboost==2.1.4",
+    "catboost==1.2.10",
+    "joblib==1.5.3",
+    "matplotlib==3.9.4",
+    "seaborn==0.13.2",
+    "requests==2.32.5",
+]
+
+[project.optional-dependencies]
+notebook = ["jupyterlab==4.5.10", "ipykernel==6.31.0", "nbformat==5.10.4", "nbconvert==7.17.1"]
+dev = ["ruff==0.9.6", "nbstripout==0.8.1"]
+
+[project.urls]
+Repository = "https://github.com/GiladAviv/LondonFlipFinder"
+Dataset = "https://github.com/GiladAviv/LondonFlipFinder/releases/tag/v1.0.0"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E402"]  # notebook cells legitimately define names before later imports
+
+[tool.ruff.lint.per-file-ignores]
+"*.ipynb" = ["E501"]
