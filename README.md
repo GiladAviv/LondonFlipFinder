@@ -91,31 +91,44 @@ GitHub Release ──► data/ ──► load ──► clean ──► spatial 
 | Land-Registry-derived price history | one row per sale event | target price, physical attributes |
 | Met Police crime by LSOA | LSOA × category × month | neighbourhood safety |
 | Bank of England base rate | one row per rate change | cost of borrowing |
-| TfL station geodata | one row per station | transport connectivity |
+| TfL station geodata (Feb 2022 snapshot) | one row per station | transport connectivity |
 | GLA borough boundaries | polygon per borough | administrative context |
 
 **Deliberately excluded.** The source file carries `saleEstimate_*` and `rentEstimate_*` columns —
 a third party's model output for the same property. Using them to predict price would be target
 leakage. The 300 MB postcode-geo file and the school scorecards are not loaded either: the
-previous version read both (costing ~1 GB of RAM) without either ever reaching a feature.
+original notebook read both (costing ~1 GB of RAM) without either ever reaching a feature.
+
+**The station file is a problem the pipeline corrects, not ignores.** It is a February 2022
+network snapshot applied to 2008–2016 transactions. Used raw, 41 of its 471 stations are Elizabeth
+Line stops that did not open until May 2022 — crediting a 2009 sale with a rail link that arrived
+thirteen years later — and another 39 are Croydon Tramlink stops with no Underground service at
+all. Both are filtered out by positive selection on the Underground/Overground/DLR flags (which
+correctly keeps the 6 stations, like Paddington, that later gained Elizabeth Line service too).
+*Residual caveat:* some Overground/DLR extensions also post-date parts of the window; fixing that
+fully needs per-station opening dates, which this dataset does not carry.
 
 ## Features
 
-All 19 features are built to answer one question: *would a buyer standing at the transaction date
-have known this?*
+24 features (19 numeric, 5 categorical) are built to answer one question: *would a buyer standing
+at the transaction date have known this?*
 
 | Group | Features |
 |---|---|
-| Physical | `floorAreaSqM`, `total_rooms`, `avg_room_size` |
-| Spatial | `distance_to_nearest_tube_m`, `distance_to_center_m`, `latitude`, `longitude`, `borough`, `outcode` |
-| Asset | `propertyType`, `tenure` |
-| Safety | `crime_volume_prev_12m` (12-month trailing sum, current month excluded) |
+| Physical | `floorAreaSqM`, `total_rooms`, `avg_room_size`, `bathrooms` |
+| Spatial | `distance_to_underground_m`, `distance_to_transit_m`, `station_zone`, `distance_to_center_m`, `latitude`, `longitude`, `borough`, `outcode` |
+| Asset | `propertyType`, `tenure`, `currentEnergyRating` |
+| Safety | `crime_volume` (1-month lag), `crime_volume_prev_12m` (12-month trailing sum, current month excluded) |
 | Macro | `interest_rate` (BoE base rate in force on the completion date) |
 | Temporal | `days_since_start`, `month_sin`, `month_cos` |
 | Market | `market_median_rolling_3m`, `market_median_rolling_12m`, `lagged_borough_median_sqm` |
 
-Distances are computed in **British National Grid (EPSG:27700)**, i.e. in metres. Nearest-station
-lookup uses a `cKDTree`, turning a 33 M-pair brute-force comparison into a sub-second query.
+Distance is split into **two** measures rather than one, because they answer different questions:
+`distance_to_underground_m` (is this a tube flat?) and `distance_to_transit_m` (does it have any
+rail link at all — Underground, Overground or DLR?). `station_zone` comes along for free from the
+same `cKDTree` query that finds the nearest Underground station. Everything is computed in
+**British National Grid (EPSG:27700)**, i.e. in metres; the tree turns a 32 M-pair brute-force
+comparison into a sub-second query.
 
 Section 17 verifies the lag guarantee *causally*: it multiplies the final month's prices tenfold
 and asserts that every lagged market feature for that month is unchanged.
@@ -126,89 +139,110 @@ and asserts that every lagged market feature for that month is unchanged.
 
 79,815 sale events with size data reduce to **59,946** modelling rows after dropping properties
 outside the GLA boundary, filtering symbolic transactions below £1,500/sqm, and deduplicating
-repeated completions. Split chronologically: 41,962 train / 8,992 validation / 8,992 test. All
-models are scored on identical rows — validation and test transactions under the £4 M cap (8,861
-and 8,857 rows respectively).
+repeated completions. Split chronologically into **four** slices — 60 % train / 15 % validation /
+10 % calibration / 15 % test (35,967 / 8,991 / 5,994 / 8,994 rows) — because conformal calibration
+needs data the model was never tuned against; see *Methodology notes* below. All models are scored
+on identical rows: validation, calibration and test transactions under the £4 M cap (8,840 / 5,916
+/ 8,859 rows respectively).
 
 Models are **selected on validation** and then scored **once** on the untouched test set.
 
 | Model | Trained on | Val MdAPE | Test MdAPE | Drift | Test MAE | Test R² |
 |---|---|---:|---:|---:|---:|---:|
-| MoE — error routing (CatBoost) | cleaned | 14.21 % | **17.49 %** | +3.28 pp | £155,575 | 0.708 |
-| 3-seed average (CatBoost) | cleaned | 14.20 % | 17.55 % | +3.35 pp | £155,560 | 0.709 |
-| CatBoost ← *selected on validation* | cleaned | **14.18 %** | 17.63 % | +3.45 pp | £159,148 | 0.681 |
-| XGBoost | raw | 14.26 % | 17.66 % | +3.40 pp | £148,743 | 0.764 |
-| XGBoost | capped | 14.34 % | 17.85 % | +3.51 pp | £149,124 | 0.775 |
-| MoE — error routing (XGB) | cleaned | 14.64 % | 17.94 % | +3.30 pp | £170,081 | 0.615 |
-| 3-seed average (XGB) | cleaned | 14.65 % | 17.98 % | +3.33 pp | £170,169 | 0.614 |
-| XGBoost | cleaned | 14.74 % | 18.03 % | +3.29 pp | £172,480 | 0.606 |
-| MoE — luxury routing (XGB) | cleaned | 14.92 % | 18.45 % | +3.53 pp | £173,374 | 0.621 |
-| Ridge (baseline) | capped | 16.16 % | 16.03 % | **−0.13 pp** | £170,993 | 0.277 |
+| 3-seed average (XGB) | cleaned | 15.50 % | **21.90 %** | +6.40 pp | £187,321 | 0.585 |
+| MoE — error routing (XGB) | cleaned | 15.45 % | 21.90 % | +6.45 pp | £187,290 | 0.585 |
+| CatBoost | cleaned | 15.11 % | 22.07 % | +6.96 pp | £178,608 | 0.653 |
+| XGBoost | capped ← *selected on validation* | **15.07 %** | 22.21 % | +7.14 pp | £171,498 | 0.724 |
+| MoE — luxury routing (XGB) | cleaned | 15.81 % | 22.21 % | +6.40 pp | £185,692 | 0.623 |
+| XGBoost | raw | 15.39 % | 22.23 % | +6.84 pp | £170,401 | 0.712 |
+| XGBoost | cleaned | 16.01 % | 22.67 % | +6.66 pp | £191,121 | 0.582 |
+| 3-seed average (CatBoost) | cleaned | 15.34 % | 22.50 % | +7.16 pp | £177,590 | 0.670 |
+| MoE — error routing (CatBoost) | cleaned | 15.33 % | 22.51 % | +7.18 pp | £177,673 | 0.669 |
+| Ridge (baseline) | capped | 17.39 % | **16.62 %** | **−0.77 pp** | £168,529 | 0.277 |
 
-**Conformal bound.** Calibrated on validation at α = 0.10, the safety multiplier is
-**q₁₀ = 0.7818** — the floor sits at 78.2 % of the predicted value. Empirical coverage on the
-held-out test set is **92.13 %** against a 90 % target (+2.13 pp), so the guarantee holds, slightly
-conservatively, despite the chronological split not strictly satisfying exchangeability. The
-scanner flags **697 of 8,857** test properties (7.87 %) as priced below their floor, at a median
-margin of **£71,780**.
+**Conformal bound.** Calibrated on a dedicated calibration split at α = 0.10 (never touched by
+early stopping or model selection), the safety multiplier is **q₁₀ = 0.8823** — the floor sits at
+88.2 % of the predicted value. Empirical coverage on the held-out test set is **91.39 %** against a
+90 % target (+1.39 pp) — closer to nominal than the previous iteration's 92.13 %, which is the
+expected effect of calibrating on genuinely untouched data rather than a validation set the model
+was indirectly tuned against. The scanner flags **763 of 8,859** test properties (8.61 %) as priced
+below their floor, at a median margin of **£73,400**.
 
-### Four findings worth reading carefully
+### Feature-group ablation: is crime worth the data it costs?
 
-**1 — The Mixture of Experts does not work.** This is the headline result, and it only became
-visible once the 3-seed average control was added. The error-driven MoE beats a plain average of
-its own three experts by **0.06 pp** (CatBoost) and **0.04 pp** (XGBoost) — noise. On validation
-the CatBoost average actually *beats* its MoE. The router, the per-sample error labelling and the
-soft-weighted combination contribute nothing over averaging the identical models; the gain
-previously attributed to "expert specialisation" is ordinary ensembling. The luxury-routed MoE is
-the **worst** tree model of the ten. Note also that the error-driven router is trained on
-*in-sample* errors, where the three seeds differ mostly by which points each happened to overfit —
-so the "specialisation" it learns is largely noise, which is consistent with the near-even
-11.8k/11.9k/11.7k split of expert wins.
+The crime file caps the whole project at 2008–2016, discarding 80 % of the available 418k-row
+price history. Section 14.2 measures what that trade actually buys by retraining CatBoost with
+each feature group removed:
 
-**2 — Removing anomalies makes the model worse.** XGBoost trained on `cleaned` data scores 18.03 %
-on test versus 17.85 % (`capped`) and 17.66 % (`raw`). The previous version reported the opposite
-because it deleted `IsolationForest` outliers from validation and test as well as training —
-scoring itself on an exam with the hard questions removed. Once the evaluation set is held fixed,
-discarding 6,200 training rows simply costs information.
+| Removed | Test MdAPE | Δ vs. full |
+|---|---:|---:|
+| *(full model)* | 22.07 % | — |
+| Macro (`interest_rate`) | 22.31 % | +0.24 pp |
+| Crime | 22.54 % | **+0.46 pp** |
+| Transport (distance + zone) | 22.68 % | +0.61 pp |
+| Market lags | 24.26 % | +2.19 pp |
 
-**3 — Validation-only reporting was optimistic by ~3.4 pp.** Every tree model drifts from ~14.2 %
-on validation to ~17.6 % on test, because validation is also what early stopping and model
-selection consumed. The previous version reported only the validation figure.
+**Verdict: crime clears the 0.15 pp bar (+0.46 pp), so — per the decision rule this ablation was
+built to test — it is not dead weight and dropping it outright is not justified.** But it is also
+not the dominant signal: the market-lag features are worth roughly 5× as much. The recommended
+next step is therefore *not* "drop crime, widen the window" but "source post-2016 LSOA crime data
+(data.police.uk publishes monthly extracts) so the window can widen to 1995–2024 without losing
+the one feature group that earned its place."
 
-**4 — The linear baseline is the most stable model, and on the headline metric it wins the test
-set.** Ridge drifts −0.13 pp between validation and test, while every gradient-boosted model
-drifts +3.3 pp or more, and its 16.03 % test MdAPE is the lowest of any model. It is not simply
-"the best model": its R² of 0.277 and £170,993 MAE are far worse than CatBoost's 0.681 and
-£159,148 — Ridge is well-behaved for the typical property and badly wrong on the tails, where the
-trees make their money. The honest reading is that the boosted models absorbed structure specific
-to the 2008–2014 regime that did not survive into 2016, and that **model selection on validation
-picked a model that lost to the baseline on the metric it was selected by.** That is an argument
-for walk-forward backtesting (improvement 2 below), not for shipping Ridge.
+*(An earlier fast-mode smoke test — 120 boosting iterations instead of 1,000 — showed the opposite
+sign on this ablation. That was a low-capacity artifact, not a real result: with too few trees to
+spend on a widened feature set, adding a feature does no better than noise. The numbers above are
+from the full-precision run and are what should be trusted.)*
+
+### The headline finding: architecture choice was an artifact of evaluation design
+
+Test MdAPE drift jumped from ~3.4 pp (previous iteration, three-way split) to **~6.4–7.2 pp**
+(this iteration, four-way split) for every tree-based model, while Ridge's drift *improved* to
+−0.77 pp. Ridge now beats the best tree model on test MdAPE by **5.3 percentage points** (16.62 %
+vs. 21.90 %) — a far larger gap than before.
+
+The cause is the four-way split itself, and it is worth stating plainly rather than burying it.
+Introducing a dedicated calibration slice did two things: it cut training data from 70 % to 60 %,
+and — because calibration sits between validation and test — it moved the validation window
+further from the test window than before (an 8-month gap instead of none). XGBoost and CatBoost
+choose their iteration count via early stopping *against validation*, so both changes hit them
+directly: less data to fit, and a selection signal that is temporally further from what it is
+being selected to predict. Ridge has no early-stopping step and is far less sensitive to either
+effect, which is why it barely moved.
+
+This is a genuine cost of the more rigorous evaluation, not a bug, and the trade was made
+deliberately: the calibration split sits *immediately before* test, which is the choice that
+protects conformal validity (residuals close in time to test are the most defensible stand-in for
+test residuals) at the expense of how close validation sits to test. An unexplored alternative is
+reordering to train → calibration → validation → test, which would restore validation's adjacency
+to test at the cost of moving calibration further away — see *Where to take it next*.
 
 ### Repeat-property diagnostic
 
-**26.1 %** of test transactions (2,308 of 8,857) are properties that also appear in training — a
+**23.8 %** of test transactions (2,112 of 8,859) are properties that also appear in training — a
 consequence of splitting a price *history* by time rather than by property.
 
 | Test subset | Rows | MdAPE | MAE | R² | Within 25 % |
 |---|---:|---:|---:|---:|---:|
-| Seen in training | 2,308 | 17.27 % | £141,018 | 0.720 | 72.8 % |
-| Unseen property | 6,549 | 17.82 % | £165,537 | 0.671 | 68.6 % |
+| Seen in training | 2,112 | 23.21 % | £165,344 | 0.727 | 57.3 % |
+| Unseen property | 6,747 | 21.91 % | £173,425 | 0.723 | 58.6 % |
 
-Properties the model has already seen are predicted **0.55 pp better** than genuinely new stock,
-so there is a memorisation effect — but a small one. On entirely unseen properties the selected
-model scores 17.82 % against its 17.63 % blended headline, meaning the headline overstates
-performance on new stock by roughly 0.2 pp. That is a real caveat and not a fatal one, and it is
-something the previous version had no way to measure. A group-aware split (improvement 1) would
-remove the ambiguity.
+This flipped sign from the previous iteration (where seen properties scored 0.55 pp *better*):
+here, previously-seen properties are predicted **1.30 pp worse** than genuinely new stock. With
+the underlying model now the more volatile `XGBoost (capped)` rather than `CatBoost (cleaned)`,
+and the training window changed, memorisation is not a stable, one-directional effect — which is
+itself informative: it means the 26 % overlap is not quietly propping up the headline number in
+either direction, but it also means the diagnostic should be re-read after every material change
+rather than assumed stable. A group-aware split (improvement 1 below) would remove the ambiguity
+entirely.
 
 ## Methodology notes
 
 ### Why the split is chronological
 
 A random split would let the model learn from June 2016 to predict January 2016 — a situation that
-never occurs in production. Sorting by date and cutting 70/15/15 reproduces the real task: train on
-the past, forecast the future.
+never occurs in production. Sorting by date and cutting it into ordered slices reproduces the real
+task: train on the past, forecast the future.
 
 ### Why MdAPE is the headline metric
 
@@ -221,15 +255,23 @@ wrong by?
 ### One evaluation universe, three training variants
 
 Models differ only in what they were **trained** on (`raw`, `capped` at £4 M, or `cleaned` of
-anomalies). Every model is **scored on identical rows** — validation/test transactions under the
-cap. Anomalies are removed from training only: deleting hard cases from your own exam inflates the
-score, and a production model does not get to refuse the awkward listings.
+anomalies). Every model is **scored on identical rows** — validation/calibration/test transactions
+under the cap. Anomalies are removed from training only: deleting hard cases from your own exam
+inflates the score, and a production model does not get to refuse the awkward listings.
+
+### Why calibration gets its own split
+
+Validation drives early stopping and model selection, so a tree model's hyperparameters are
+implicitly tuned to minimise error on those exact rows. Calibrating the conformal bound there too
+would make `q₁₀` optimistically tight — the safety multiplier would look better than it really is.
+The calibration split sits strictly between validation and test, touched by nothing except section
+15, so `q₁₀` is computed on data the model genuinely never influenced.
 
 ### The conformal bound
 
-On validation we take the ratio of actual to predicted price for every property and read off the
-10th percentile, `q₁₀`. A new property's floor is `prediction × q₁₀`, and ~90 % of properties
-should sit above it.
+On the calibration split we take the ratio of actual to predicted price for every property and
+read off the 10th percentile, `q₁₀`. A new property's floor is `prediction × q₁₀`, and ~90 % of
+properties should sit above it.
 
 Ratios rather than differences, because absolute residuals here are heteroscedastic — one absolute
 quantile would be far too loose at the bottom of the market and far too tight at the top. A
@@ -270,6 +312,27 @@ Two additions worth calling out:
 Also new: a versioned Parquet cache (a pipeline change invalidates it rather than silently serving
 a stale table), seven automated self-checks, and persisted artifacts.
 
+### Phase A — a follow-up review found four more issues
+
+A second pass over the committed rewrite found problems specific enough that fixing them changed
+results again:
+
+| # | Issue | Fix |
+|---|---|---|
+| 1 | The station file is a Feb 2022 snapshot; 41 Elizabeth Line stations (opened May 2022) and 39 Croydon Tramlink stops (no Underground service) fed the one distance feature used for every 2008–2016 transaction | Positive selection on Underground/Overground/DLR flags; split into `distance_to_underground_m` and `distance_to_transit_m` |
+| 2 | `Zone`, present for all 471 stations, had zero references in the pipeline | Nearest station's fare zone attached as `station_zone`, free from the existing `cKDTree` query |
+| 3 | The conformal calibration set was the same validation set used for early stopping and model selection — calibrating on data the model was implicitly tuned against | New dedicated calibration split (60/15/10/15 train/val/calib/test); §17 gained an ordering assertion |
+| 4 | `bathrooms` was loaded and only plotted; `currentEnergyRating` was not even loaded; `crime_volume` was engineered, merged, and never added to `FEATURES` | All four wired into the feature list |
+
+Also new: **§14.2**, a feature-group ablation that quantifies whether crime is worth the 80 % of
+the dataset it costs (see *Results* above) — the previous iteration only asserted this as a future
+improvement; it is now measured.
+
+The honest cost of fix #3: shrinking training data by 10 percentage points and moving validation
+further from test raised tree-model test MdAPE by several points and widened Ridge's lead. See
+*The headline finding* in Results — this is a direct, disclosed consequence of the fix, not a
+regression to paper over.
+
 ---
 
 ## Project structure
@@ -285,37 +348,52 @@ artifacts/                 model, manifest, leaderboard, cache (gitignored)
 
 ## Limitations
 
-* **A flip flag is a statistical claim, not a financial one.** It says the price is below a
-  calibrated floor. It says nothing about stamp duty, refurbishment, holding costs, or *why* the
-  property is cheap — and properties are usually cheap for a reason the data does not record
-  (short lease, structural problems, a motivated seller).
+* **The scanner evaluates completed sales, not properties you can buy.** `TARGET` is
+  `history_price` — what a property *actually sold for*. A transaction that sold below its floor
+  in 2016 validates the valuation model; it is not a listing anyone can act on today. A live
+  scanner needs an asking-price feed and a calibration step for the asking→sold gap, which this
+  dataset does not contain.
+* **A flip flag is a statistical claim, not a financial one.** It says nothing about stamp duty,
+  refurbishment, holding costs, or *why* the property is cheap — and properties are usually cheap
+  for a reason the data does not record (short lease, structural problems, a motivated seller).
 * **Conformal coverage is marginal, not conditional** — ~90 % overall, not guaranteed within any
   given borough or price decile.
-* **The 2008–2016 window ends a decade ago.** Brexit, the 2016 stamp duty surcharge, the pandemic
-  and the 2022 rate cycle all fall outside it.
+* **The 2008–2016 window ends a decade ago**, and the §14.2 ablation shows crime is worth keeping
+  (+0.46 pp) at current resolution — so this is not a window that can simply be widened by
+  dropping crime. It needs post-2016 crime data instead. Brexit, the 2016 stamp duty surcharge,
+  the pandemic and the 2022 rate cycle all fall outside the current window regardless.
 * **Gain-based importance is not causal**, and this feature set is heavily collinear — latitude,
   longitude, borough, outcode and distance-to-centre all encode "where".
+* **The four-way split has a real accuracy cost**, documented in *The headline finding* above —
+  tree-model test MdAPE rose several points once calibration stopped borrowing from validation.
 
 ## Where to take it next
 
 1. **Split by property, not only by time** — group-aware splitting keyed on address, reported
    alongside the chronological number.
-2. **Walk-forward backtesting** — rolling-origin evaluation gives a distribution of MdAPE instead
-   of a single number with no error bar.
-3. **Turn the margin into a P&L** — stamp duty bands (including the 3 % surcharge), refurbishment,
+2. **Source post-2016 LSOA crime data** (`data.police.uk` publishes monthly extracts) so the
+   window can widen toward the full 1995–2024 history (~418k rows, 5× current volume) without
+   dropping the one feature group the §14.2 ablation showed earns its place.
+3. **Try reordering the four-way split** to train → calibration → validation → test. The current
+   order protects conformal validity (calibration sits closest to test) at the cost of validation's
+   proximity to test, which the headline finding shows hurt early-stopped models materially. The
+   reordering is the untested alternative trade-off — worth an explicit before/after comparison
+   rather than assuming the current order is optimal.
+4. **Walk-forward backtesting** — rolling-origin evaluation gives a distribution of MdAPE instead
+   of a single number with no error bar, and would settle whether Ridge's current lead is real or
+   an artifact of which months landed in this particular test window.
+5. **Turn the margin into a P&L** — stamp duty bands (including the 3 % surcharge), refurbishment,
    financing, agent and legal fees; then rank candidates by return rather than by pounds.
-4. **Conditional (Mondrian) conformal prediction** — per-borough and per-decile multipliers so
+6. **Conditional (Mondrian) conformal prediction** — per-borough and per-decile multipliers so
    coverage holds within the segments an investor actually shops in.
-5. **Features the data already supports** — `bathrooms` and `currentEnergyRating` sit unused in the
-   source file; crime is available at LSOA level (a 30× resolution gain) but consumed per borough;
-   lease length drives much of flat valuation and is absent entirely.
-6. **SHAP plus location-grouped permutation importance**, so "where" is credited once rather than
+7. **Lease length** drives much of flat valuation and is absent entirely from the source data.
+8. **SHAP plus location-grouped permutation importance**, so "where" is credited once rather than
    split five ways.
-7. **Direct quantile regression** (`objective='reg:quantileerror'`) as an alternative to a single
+9. **Direct quantile regression** (`objective='reg:quantileerror'`) as an alternative to a single
    global conformal multiplier.
-8. **Operational hardening** — extract the pipeline into a package with pytest fixtures over a
-   sample, wire `nbstripout` into pre-commit, and schedule retraining that fails loudly when the
-   section 17 self-checks do.
+10. **Operational hardening** — extract the pipeline into a package with pytest fixtures over a
+    sample, wire `nbstripout` into pre-commit, and schedule retraining that fails loudly when the
+    section 17 self-checks do.
 
 ## License
 

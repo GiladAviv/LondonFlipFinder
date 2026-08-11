@@ -13,3 +13,6 @@ __pycache__/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# CatBoost training logs, written to cwd by default
+catboost_info/
