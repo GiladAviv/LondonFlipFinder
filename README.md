@@ -149,92 +149,201 @@ Models are **selected on validation** and then scored **once** on the untouched 
 
 | Model | Trained on | Val MdAPE | Test MdAPE | Drift | Test MAE | Test R² |
 |---|---|---:|---:|---:|---:|---:|
-| 3-seed average (XGB) | cleaned | 15.50 % | **21.90 %** | +6.40 pp | £187,321 | 0.585 |
-| MoE — error routing (XGB) | cleaned | 15.45 % | 21.90 % | +6.45 pp | £187,290 | 0.585 |
-| CatBoost | cleaned | 15.11 % | 22.07 % | +6.96 pp | £178,608 | 0.653 |
-| XGBoost | capped ← *selected on validation* | **15.07 %** | 22.21 % | +7.14 pp | £171,498 | 0.724 |
-| MoE — luxury routing (XGB) | cleaned | 15.81 % | 22.21 % | +6.40 pp | £185,692 | 0.623 |
-| XGBoost | raw | 15.39 % | 22.23 % | +6.84 pp | £170,401 | 0.712 |
-| XGBoost | cleaned | 16.01 % | 22.67 % | +6.66 pp | £191,121 | 0.582 |
-| 3-seed average (CatBoost) | cleaned | 15.34 % | 22.50 % | +7.16 pp | £177,590 | 0.670 |
-| MoE — error routing (CatBoost) | cleaned | 15.33 % | 22.51 % | +7.18 pp | £177,673 | 0.669 |
-| Ridge (baseline) | capped | 17.39 % | **16.62 %** | **−0.77 pp** | £168,529 | 0.277 |
+| **3-seed average detrended (XGB)** ← *selected on validation* | capped | **13.06 %** | **13.30 %** | +0.24 pp | £132,005 | 0.794 |
+| MoE — error routing detrended (XGB) | capped | 13.06 % | 13.34 % | +0.28 pp | £132,013 | 0.794 |
+| XGBoost detrended-market *(best single model)* | capped | 13.12 % | 13.48 % | +0.36 pp | £132,608 | 0.790 |
+| CatBoost detrended-market | cleaned | 13.40 % | 14.43 % | +1.03 pp | £137,437 | 0.776 |
+| MoE — luxury routing detrended (XGB) | capped | 13.54 % | 14.11 % | +0.57 pp | £139,260 | 0.786 |
+| XGBoost detrended-borough | capped | 13.98 % | 15.21 % | +1.23 pp | £135,392 | 0.796 |
+| CatBoost detrended-borough | cleaned | 14.09 % | 18.03 % | +3.94 pp | £147,661 | 0.777 |
+| CatBoost | cleaned | 14.79 % | 21.39 % | +6.60 pp | £162,248 | 0.747 |
+| 3-seed average (CatBoost) | cleaned | 14.97 % | 21.86 % | +6.89 pp | £162,481 | 0.755 |
+| MoE — error routing (CatBoost) | cleaned | 15.01 % | 21.90 % | +6.89 pp | £162,448 | 0.755 |
+| MoE — error routing (XGB) | cleaned | 15.12 % | 21.43 % | +6.31 pp | £172,939 | 0.690 |
+| 3-seed average (XGB) | cleaned | 15.12 % | 21.46 % | +6.34 pp | £172,972 | 0.690 |
+| XGBoost | raw | 15.30 % | 22.49 % | +7.19 pp | £173,485 | 0.689 |
+| XGBoost | capped | 15.45 % | 22.62 % | +7.17 pp | £173,433 | 0.720 |
+| MoE — luxury routing (XGB) | cleaned | 15.46 % | 21.36 % | +5.90 pp | £175,174 | 0.684 |
+| XGBoost | cleaned | 15.55 % | 22.47 % | +6.92 pp | £178,700 | 0.674 |
+| Ridge (baseline) | capped | 17.43 % | 16.72 % | −0.71 pp | £168,702 | 0.280 |
+
+The top seven rows are new: four single detrended models (section 12.1, see *Why the trees
+couldn't beat Ridge — and the fix* below) plus three Mixture-of-Experts variants retrained on that
+same fixed target (section 14.4). Every row below Ridge is unchanged from before detrending existed:
+the plain trees and the plain-target MoE variants still show the same +6.4–7.2 pp drift they always
+did, which turns out to be diagnostic rather than incidental (see that section). The model at the
+top of this table is what the pipeline actually selects and deploys — chosen on validation MdAPE
+alone, as always. Its 0.07 pp test-set disadvantage against the single-model runner-up is real but
+small, and is reported rather than corrected for; see *Is the Mixture of Experts needed?* below for
+why the notebook does not simply swap in the model with the better test score.
 
 **Conformal bound.** Calibrated on a dedicated calibration split at α = 0.10 (never touched by
-early stopping or model selection), the safety multiplier is **q₁₀ = 0.8823** — the floor sits at
-88.2 % of the predicted value. Empirical coverage on the held-out test set is **91.39 %** against a
-90 % target (+1.39 pp) — closer to nominal than the previous iteration's 92.13 %, which is the
-expected effect of calibrating on genuinely untouched data rather than a validation set the model
-was indirectly tuned against. The scanner flags **763 of 8,859** test properties (8.61 %) as priced
-below their floor, at a median margin of **£73,400**.
+early stopping or model selection), the safety multiplier is **q₁₀ = 0.7484** — the floor sits at
+74.8 % of the predicted value, tighter than the previous iteration's 0.8823 because the underlying
+model's predictions are now far more accurate and need a smaller safety margin. Empirical coverage
+on the held-out test set is **88.96 %** against a 90 % target (−1.04 pp), and the §17 self-check
+verifies coverage on a *held-out slice of the calibration split* (90.25 %) rather than asserting on
+test. The scanner flags **978 of 8,859** test properties (11.04 %) as priced below their floor, at
+a median margin of **£76,166**.
 
 ### Feature-group ablation: is crime worth the data it costs?
 
 The crime file caps the whole project at 2008–2016, discarding 80 % of the available 418k-row
-price history. Section 14.2 measures what that trade actually buys by retraining CatBoost with
-each feature group removed:
+price history. Section 14.5 measures what that trade actually buys by retraining the winning
+detrended XGBoost recipe with each feature group removed:
 
-| Removed | Test MdAPE | Δ vs. full |
+| Removed | Validation MdAPE | Δ vs. full |
 |---|---:|---:|
-| *(full model)* | 22.07 % | — |
-| Macro (`interest_rate`) | 22.31 % | +0.24 pp |
-| Crime | 22.54 % | **+0.46 pp** |
-| Transport (distance + zone) | 22.68 % | +0.61 pp |
-| Market lags | 24.26 % | +2.19 pp |
+| Macro (`interest_rate`) | 13.05 % | −0.07 pp |
+| *(full model)* | 13.12 % | — |
+| Crime | 13.13 % | **+0.01 pp** |
+| Market lags | 13.29 % | +0.17 pp |
+| Transport (distance + zone) | 13.37 % | +0.25 pp |
 
-**Verdict: crime clears the 0.15 pp bar (+0.46 pp), so — per the decision rule this ablation was
-built to test — it is not dead weight and dropping it outright is not justified.** But it is also
-not the dominant signal: the market-lag features are worth roughly 5× as much. The recommended
-next step is therefore *not* "drop crime, widen the window" but "source post-2016 LSOA crime data
-(data.police.uk publishes monthly extracts) so the window can widen to 1995–2024 without losing
-the one feature group that earned its place."
+**Verdict: crime falls far below the 0.15 pp bar (+0.01 pp), so the 80 % data sacrifice is not
+justified.** The recommended next step is to drop crime and widen the window to the full 1995–2024
+history — roughly 5× the current volume — or, if the signal is wanted, to source post-2016 LSOA
+crime data so the window can widen without losing it. Removing `interest_rate` actually *improves*
+validation MdAPE slightly, so the macro group is not earning its place either.
 
-*(An earlier fast-mode smoke test — 120 boosting iterations instead of 1,000 — showed the opposite
-sign on this ablation. That was a low-capacity artifact, not a real result: with too few trees to
-spend on a widened feature set, adding a feature does no better than noise. The numbers above are
-from the full-precision run and are what should be trusted.)*
+**This verdict reversed, and the reversal is the point.** An earlier version of this ablation
+scored on the **test set** and ran on the **plain, non-detrended target** — the recipe §12.1 shows
+is broken — and reported crime at +0.46 pp, above the bar. Both were defects: a decision must not
+read test, and measuring feature value on a model with a known level error credits any feature that
+partially compensates for it. Scored on validation and on the recipe actually shipped, most of that
+apparent value disappears. The market-lag group falls the same way, from +2.19 pp to +0.17 pp,
+because detrending moves the market signal into the *target* — so those columns are no longer
+carrying it as inputs. That figure is a lower bound for the same reason: the deflator still uses
+`market_median_rolling_3m`, so the group cannot be fully ablated.
 
-### The headline finding: architecture choice was an artifact of evaluation design
+*(Scored on validation, which is also the early-stopping set, so the absolute level is optimistic.
+All six variants share that bias identically and the gate consumes only the delta.)*
 
-Test MdAPE drift jumped from ~3.4 pp (previous iteration, three-way split) to **~6.4–7.2 pp**
-(this iteration, four-way split) for every tree-based model, while Ridge's drift *improved* to
-−0.77 pp. Ridge now beats the best tree model on test MdAPE by **5.3 percentage points** (16.62 %
-vs. 21.90 %) — a far larger gap than before.
+### Why the trees couldn't beat Ridge — and the fix
 
-The cause is the four-way split itself, and it is worth stating plainly rather than burying it.
-Introducing a dedicated calibration slice did two things: it cut training data from 70 % to 60 %,
-and — because calibration sits between validation and test — it moved the validation window
-further from the test window than before (an 8-month gap instead of none). XGBoost and CatBoost
-choose their iteration count via early stopping *against validation*, so both changes hit them
-directly: less data to fit, and a selection signal that is temporally further from what it is
-being selected to predict. Ridge has no early-stopping step and is far less sensitive to either
-effect, which is why it barely moved.
+An earlier iteration of this project found Ridge beating every tree model on test MdAPE by 5.3
+percentage points, and attributed it to the four-way split moving the validation window away from
+test (documented below, in *Why calibration gets its own split*). That explanation was plausible
+given the evidence available at the time, but a more direct test shows it was not the primary
+cause.
 
-This is a genuine cost of the more rigorous evaluation, not a bug, and the trade was made
-deliberately: the calibration split sits *immediately before* test, which is the choice that
-protects conformal validity (residuals close in time to test are the most defensible stand-in for
-test residuals) at the expense of how close validation sits to test. An unexplored alternative is
-reordering to train → calibration → validation → test, which would restore validation's adjacency
-to test at the cost of moving calibration further away — see *Where to take it next*.
+**The real cause: a tree's prediction is a leaf constant, so it cannot extrapolate a rising
+market.** Once a test-time value of a trending feature (`days_since_start`,
+`market_median_rolling_3m`) exceeds anything seen in training, every such row falls into the same
+boundary leaf and the model flat-lines at the last price level it learned. Ridge multiplies by a
+coefficient instead of splitting, so it at least projects the trend forward — that asymmetry is
+what was producing the gap. It is not a guess. Measured on the **validation** set (section 12.2,
+added so the diagnosis does not depend on held-out data), plain XGBoost under-predicts by a mean
+residual of **+£78,782** against Ridge's **+£52,225** — a one-directional level error, not noise.
+
+Note what that Ridge figure implies, because it sharpens the claim: Ridge is *also* biased by the
+same mechanism, just less. The market rose faster than any linear projection of the training
+window. So the honest statement is not "trees cannot extrapolate and Ridge can" but "a
+non-stationary target biases every model here, and punishes the trees hardest."
+
+**The fix removes the need to extrapolate at all.** Instead of predicting `price`, the detrended
+models (section 12.1) predict the *ratio* of price to a lagged market level:
+
+$$y = \log\!\left(\frac{\text{price}}{\text{market level}}\right)$$
+
+"How much is this property worth relative to where the market already is" stays close to
+stationary even while the market trends upward, so the tree only has to interpolate within a
+range of ratios it has already seen — never extrapolate past it. The predicted ratio is multiplied
+back onto the market level at inference time. XGBoost also gets an explicit
+`objective="reg:absoluteerror"`, aligning its loss with MdAPE (a median of relative errors)
+instead of the unset default of squared error on `log(price)`.
+
+The result: validation mean-residual bias fell from **+£78,782 to +£20,873** — less than half
+Ridge's — and test-set drift for XGBoost collapsed from **+7.17 pp to +0.36 pp**, using the
+*identical* four-way split as before. That last point is what overturns the
+original explanation: if the split geometry were the primary cause, detrending (which changes
+nothing about which rows are in which split) should not have fixed it. The split-ordering cost
+documented below is real, but it was a secondary effect riding on top of the much larger
+extrapolation problem, not the main story.
+
+### Which deflator? A three-way comparison, not an assumption
+
+The detrending fix itself has two candidate forms, and a natural next question: does a
+*finer-grained* deflator do even better than a market-wide one? Three options were trained and
+scored head to head for both backends (section 14.3):
+
+Validation MdAPE decides; test is shown so the choice can be checked rather than trusted:
+
+| Backend | | Regular | Market-wide | Borough-scaled |
+|---|---|---:|---:|---:|
+| XGBoost | validation | 15.45 % | **13.12 %** | 13.98 % |
+| XGBoost | test | 22.62 % | **13.48 %** | 15.21 % |
+| CatBoost | validation | 14.79 % | **13.40 %** | 14.09 % |
+| CatBoost | test | 21.39 % | **14.43 %** | 18.03 % |
+
+*Market-wide* = `log(price / market_median_rolling_3m)`, one deflator per calendar month, shared
+by every property. *Borough-scaled* = `log(price / (lagged_borough_median_sqm × floorAreaSqM))`,
+personalised to each property's own size and borough — the hypothesis being that finer granularity
+should capture more signal.
+
+**That hypothesis was wrong.** The coarser, market-wide deflator wins for both backends, on both
+validation and test, and by a wide margin for CatBoost. `lagged_borough_median_sqm` is estimated
+from far fewer sales per month than the whole-market median — one borough's transactions in a
+3-month window, against the entire city's — and because the deflator is a *divisor*, that extra
+noise gets baked directly into every training label it divides into. The whole-market median,
+estimated from thousands of sales, does not have that problem. Crucially, using the coarser
+deflator costs nothing in borough- or size-specific signal: `borough`, `floorAreaSqM` and
+`lagged_borough_median_sqm` are still ordinary input features, so the tree remains free to learn
+those effects directly, from *uncorrupted* labels. The general lesson: a deflator should remove
+only what the model architecture cannot learn on its own (the market-wide time trend); anything
+the model can already learn from a feature should stay a feature, not get folded into the label.
+**Market-wide is the deflator used by `XGBoost detrended-market (capped)`** — the best-scoring
+single model, and the runner-up to the model section 14 actually selects (see below).
+
+### Is the Mixture of Experts needed?
+
+Section 12 built two MoE designs — luxury routing and error-driven routing — and a 3-seed-average
+control, all originally trained on plain `log(price)`, the same target that made the single trees
+lose to Ridge. Once section 12.1 fixed that target, the fair question became: does wrapping the
+*fixed* model in an MoE add anything, or was the earlier "MoE roughly ties its own average"
+finding just an artifact of a broken target? Section 14.4 retrains all three on the winning
+detrended recipe and checks each against the single best model:
+
+| Variant | Test MdAPE | Test MAE | Test R² | Δ vs. single model |
+|---|---:|---:|---:|---:|
+| 3-seed average, detrended (XGB) | **13.30 %** | £132,005 | 0.794 | −0.18 pp |
+| MoE — error routing, detrended (XGB) | 13.34 % | £132,013 | 0.794 | −0.14 pp |
+| Single model (`XGBoost detrended-market`, capped) | 13.48 % | £132,608 | 0.790 | — |
+| MoE — luxury routing, detrended (XGB) | 14.11 % | £139,260 | 0.786 | +0.64 pp |
+
+**Averaging helps; routing does not.** A plain 3-seed average beats the best single model by
+0.18 pp, and error-driven routing by 0.14 pp — but the router does not beat its own averaging
+control (**−0.005 pp on validation**, the comparison the verdict is drawn from). In other words the
+entire gain comes from averaging three seeds, which costs nothing conceptually, and none of it from
+the learned routing that was the architecturally interesting part. Luxury routing is worse than
+every alternative, by 0.64 pp: splitting the market into "standard" and "luxury" and training a
+specialist for each loses more from halving each expert's data than it gains from specialisation.
+
+The 3-seed average is also what section 14 **selects**, on validation, so this is one of the rare
+cases where the interesting result and the deployed model coincide. That is not by construction —
+selection reads validation only, and the routing verdict above is likewise computed on validation
+precisely so that a conclusion about architecture never depends on the held-out set. The test
+column is reported for disclosure.
 
 ### Repeat-property diagnostic
 
 **23.8 %** of test transactions (2,112 of 8,859) are properties that also appear in training — a
-consequence of splitting a price *history* by time rather than by property.
+consequence of splitting a price *history* by time rather than by property. Recomputed against the
+selected model, `3-seed average detrended (XGB)`:
 
 | Test subset | Rows | MdAPE | MAE | R² | Within 25 % |
 |---|---:|---:|---:|---:|---:|
-| Seen in training | 2,112 | 23.21 % | £165,344 | 0.727 | 57.3 % |
-| Unseen property | 6,747 | 21.91 % | £173,425 | 0.723 | 58.6 % |
+| Seen in training | 2,112 | 11.70 % | £110,430 | 0.811 | 83.8 % |
+| Unseen property | 6,747 | 13.96 % | £138,759 | 0.790 | 75.3 % |
 
-This flipped sign from the previous iteration (where seen properties scored 0.55 pp *better*):
-here, previously-seen properties are predicted **1.30 pp worse** than genuinely new stock. With
-the underlying model now the more volatile `XGBoost (capped)` rather than `CatBoost (cleaned)`,
-and the training window changed, memorisation is not a stable, one-directional effect — which is
-itself informative: it means the 26 % overlap is not quietly propping up the headline number in
-either direction, but it also means the diagnostic should be re-read after every material change
-rather than assumed stable. A group-aware split (improvement 1 below) would remove the ambiguity
-entirely.
+Previously-seen properties are predicted **2.26 pp better** than genuinely unseen stock — a real
+memorisation effect, and one that has recurred with the same sign (though different magnitude)
+across every model change in this project, unlike the single-iteration flip seen earlier. That is
+mild evidence it is a stable property of the data (repeat sales genuinely are easier to value)
+rather than noise tied to any one model. Even the *harder*, unseen-property subset — the number
+that generalises to new stock — sits at 14.06 % MdAPE, comfortably better than every non-detrended
+model's *blended* headline figure. A group-aware split (improvement 1 below) would remove the
+remaining ambiguity.
 
 ## Methodology notes
 
@@ -324,14 +433,18 @@ results again:
 | 3 | The conformal calibration set was the same validation set used for early stopping and model selection — calibrating on data the model was implicitly tuned against | New dedicated calibration split (60/15/10/15 train/val/calib/test); §17 gained an ordering assertion |
 | 4 | `bathrooms` was loaded and only plotted; `currentEnergyRating` was not even loaded; `crime_volume` was engineered, merged, and never added to `FEATURES` | All four wired into the feature list |
 
-Also new: **§14.2**, a feature-group ablation that quantifies whether crime is worth the 80 % of
+Also new: **§14.5**, a feature-group ablation that quantifies whether crime is worth the 80 % of
 the dataset it costs (see *Results* above) — the previous iteration only asserted this as a future
 improvement; it is now measured.
 
 The honest cost of fix #3: shrinking training data by 10 percentage points and moving validation
-further from test raised tree-model test MdAPE by several points and widened Ridge's lead. See
-*The headline finding* in Results — this is a direct, disclosed consequence of the fix, not a
-regression to paper over.
+further from test raised the *plain* tree models' test MdAPE by several points, and — at the time
+— was the leading explanation for why Ridge had overtaken them. A later iteration (see *Why the
+trees couldn't beat Ridge — and the fix*, in Results) found the split-ordering cost was real but
+secondary: the primary cause was a non-stationary target the trees could not extrapolate, and
+fixing that closed the gap using the identical split. Both findings are kept in this document
+because both are true and both were disclosed as they were found, not because the second
+supersedes the first's honesty — it corrects its causal attribution.
 
 ---
 
@@ -358,30 +471,37 @@ artifacts/                 model, manifest, leaderboard, cache (gitignored)
   for a reason the data does not record (short lease, structural problems, a motivated seller).
 * **Conformal coverage is marginal, not conditional** — ~90 % overall, not guaranteed within any
   given borough or price decile.
-* **The 2008–2016 window ends a decade ago**, and the §14.2 ablation shows crime is worth keeping
-  (+0.46 pp) at current resolution — so this is not a window that can simply be widened by
-  dropping crime. It needs post-2016 crime data instead. Brexit, the 2016 stamp duty surcharge,
-  the pandemic and the 2022 rate cycle all fall outside the current window regardless.
+* **The 2008–2016 window ends a decade ago**, and the corrected §14.5 ablation shows crime is
+  worth only +0.01 pp — so the window *can* be widened by dropping crime, and probably should be.
+  Brexit, the 2016 stamp duty surcharge, the pandemic and the 2022 rate cycle all fall outside the
+  current window regardless.
 * **Gain-based importance is not causal**, and this feature set is heavily collinear — latitude,
   longitude, borough, outcode and distance-to-centre all encode "where".
-* **The four-way split has a real accuracy cost**, documented in *The headline finding* above —
-  tree-model test MdAPE rose several points once calibration stopped borrowing from validation.
+* **The four-way split has a real, secondary accuracy cost for models that use early stopping**,
+  documented in *Why the trees couldn't beat Ridge — and the fix* above — smaller than the
+  non-stationary-target problem that section also diagnoses and fixes, but not zero.
+* **The borough-scaled deflator was a reasonable idea that measurably did not work** (section
+  14.3) — worth knowing before reaching for finer-grained detrending elsewhere in this pipeline
+  (e.g. per-property-type) without testing it the same way.
 
 ## Where to take it next
 
 1. **Split by property, not only by time** — group-aware splitting keyed on address, reported
    alongside the chronological number.
-2. **Source post-2016 LSOA crime data** (`data.police.uk` publishes monthly extracts) so the
-   window can widen toward the full 1995–2024 history (~418k rows, 5× current volume) without
-   dropping the one feature group the §14.2 ablation showed earns its place.
-3. **Try reordering the four-way split** to train → calibration → validation → test. The current
-   order protects conformal validity (calibration sits closest to test) at the cost of validation's
-   proximity to test, which the headline finding shows hurt early-stopped models materially. The
-   reordering is the untested alternative trade-off — worth an explicit before/after comparison
-   rather than assuming the current order is optimal.
+2. **Widen the window to the full 1995–2024 history** (~418k rows, 5× current volume). The
+   corrected §14.5 ablation prices crime at +0.01 pp of validation MdAPE, so the feature no longer
+   justifies the 80 % of the data its coverage costs. Dropping it is now the cheapest large win
+   available. If the signal is still wanted, `data.police.uk` publishes post-2016 monthly LSOA
+   extracts that would let the window widen without losing it — but that is optional rather than
+   prerequisite. `interest_rate` is also a candidate for removal: ablating it *improved*
+   validation MdAPE by 0.07 pp.
+3. **Try reordering the four-way split** to train → calibration → validation → test. Now a minor
+   optimisation rather than the main fix — *Why the trees couldn't beat Ridge* shows detrending
+   closed most of the gap on the *current* split order — but the residual +0.30–0.80 pp drift on
+   the detrended models suggests a small further gain is still on the table.
 4. **Walk-forward backtesting** — rolling-origin evaluation gives a distribution of MdAPE instead
-   of a single number with no error bar, and would settle whether Ridge's current lead is real or
-   an artifact of which months landed in this particular test window.
+   of a single number with no error bar, and would settle whether the detrended models' lead over
+   Ridge is stable across market regimes or specific to this test window.
 5. **Turn the margin into a P&L** — stamp duty bands (including the 3 % surcharge), refurbishment,
    financing, agent and legal fees; then rank candidates by return rather than by pounds.
 6. **Conditional (Mondrian) conformal prediction** — per-borough and per-decile multipliers so
