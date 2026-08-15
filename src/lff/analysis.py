@@ -7,6 +7,7 @@ import xgboost as xgb
 
 from .config import Config
 from .crime import LSOA_CRIME_FEATURES
+from .features.prior_sale import PRIOR_SALE_FEATURES
 from .features.registry import BOROUGH_CRIME_FEATURES, FEATURES
 from .metrics import ModelBundle, ResultsRegistry, regression_metrics
 from .models import detrend, fit_market_deflator, market_level, retrend
@@ -173,11 +174,8 @@ def crime_resolution_study(splits: Splits, variants: dict[str, pd.DataFrame], cf
     The frames must already carry the LSOA crime columns; `build_master_table` attaches them
     when it is handed an `lsoa_crime` table.
     """
-    train_df = variants["capped"]
-    deflator = fit_market_deflator(train_df)
     base = [f for f in FEATURES if f not in BOROUGH_CRIME_FEATURES]
-
-    lsoa_available = [c for c in LSOA_CRIME_FEATURES if c in train_df.columns]
+    lsoa_available = [c for c in LSOA_CRIME_FEATURES if c in variants["capped"].columns]
     if not lsoa_available:
         raise KeyError(
             "No LSOA crime columns in the model frame. Pass lsoa_crime to build_master_table."
@@ -194,6 +192,24 @@ def crime_resolution_study(splits: Splits, variants: dict[str, pd.DataFrame], cf
         "Borough + LSOA": [*BOROUGH_CRIME_FEATURES, *lsoa_available],
     }
 
+    return _seeded_design_study(splits, variants, cfg, val_eval, base, designs, seeds,
+                                baseline="No crime", label="Crime features")
+
+
+def _seeded_design_study(splits: Splits, variants: dict[str, pd.DataFrame], cfg: Config,
+                         val_eval: pd.DataFrame, base: list[str],
+                         designs: dict[str, list[str]], seeds: tuple[int, ...],
+                         baseline: str, label: str) -> pd.DataFrame:
+    """Refit one recipe under several feature designs and several seeds; report paired gains.
+
+    A single gradient-boosted fit cannot separate a 0.1 pp effect from run-to-run variation,
+    and both studies that use this engine feed decisions rather than descriptions. Each design
+    is therefore refit under every seed, and each gain is differenced against the baseline
+    *within* its own seed before averaging, so seed-level variation cancels rather than adding.
+    """
+    train_df = variants["capped"]
+    deflator = fit_market_deflator(train_df)
+
     def frame_for(part: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
         X = part[columns].copy()
         for col, dtype in splits.category_dtypes.items():
@@ -201,20 +217,17 @@ def crime_resolution_study(splits: Splits, variants: dict[str, pd.DataFrame], cf
                 X[col] = X[col].astype(dtype)
         return X
 
-    # The deflator reads market_median_rolling_3m, which is in `base` for every variant, so the
+    # The deflator reads market_median_rolling_3m, which is in `base` for every design, so the
     # label is identical throughout. Only the inputs move.
     X_train_lvl, X_val_lvl = splits.features(train_df), splits.features(val_eval)
     y_train = detrend(splits.target(train_df), market_level(X_train_lvl, deflator))
+    y_val = detrend(splits.target(val_eval), market_level(X_val_lvl, deflator))
 
-    # Every design is refit under each seed, and the gain is computed *within* a seed before
-    # averaging. A single fit cannot separate a real effect from seed noise, and this study
-    # decides whether the 2008-2016 window survives -- too consequential to read off one run.
     per_seed: dict[str, dict[int, float]] = {name: {} for name in designs}
     for seed in seeds:
-        for name, crime_cols in designs.items():
-            columns = base + crime_cols
+        for name, extra in designs.items():
+            columns = base + extra
             X_train, X_val = frame_for(train_df, columns), frame_for(val_eval, columns)
-            y_val = detrend(splits.target(val_eval), market_level(X_val_lvl, deflator))
 
             model = xgb.XGBRegressor(
                 n_estimators=cfg.n_estimators, max_depth=8, learning_rate=0.03,
@@ -227,22 +240,47 @@ def crime_resolution_study(splits: Splits, variants: dict[str, pd.DataFrame], cf
             predicted = retrend(model.predict(X_val), market_level(X_val_lvl, deflator))
             metrics = regression_metrics(splits.target(val_eval), predicted)
             per_seed[name][seed] = metrics["MdAPE"]
-            print(f"  seed {seed}  {name:<28}{len(crime_cols):>2} cols   "
+            print(f"  seed {seed}  {name:<30}{len(extra):>2} cols   "
                   f"MdAPE {metrics['MdAPE']:6.3f}%")
 
     rows = []
-    for name, crime_cols in designs.items():
+    for name, extra in designs.items():
         scores = np.array([per_seed[name][s] for s in seeds])
-        # Paired against the same seed, so seed-level variation cancels instead of adding.
-        gains = np.array([per_seed["No crime"][s] - per_seed[name][s] for s in seeds])
+        gains = np.array([per_seed[baseline][s] - per_seed[name][s] for s in seeds])
         rows.append({
-            "Crime features": name,
-            "Columns": len(crime_cols),
+            label: name,
+            "Columns": len(extra),
             "MdAPE mean": scores.mean(),
             "MdAPE sd": scores.std(ddof=1) if len(seeds) > 1 else np.nan,
-            "Gain vs. no crime": gains.mean(),
+            f"Gain vs. {baseline.lower()}": gains.mean(),
             "Gain sd": gains.std(ddof=1) if len(seeds) > 1 else np.nan,
             "Seeds won": int((gains > 0).sum()),
             "Seeds": len(seeds),
         })
     return pd.DataFrame(rows)
+
+
+def prior_sale_study(splits: Splits, variants: dict[str, pd.DataFrame], cfg: Config,
+                     val_eval: pd.DataFrame,
+                     seeds: tuple[int, ...] = (42,)) -> pd.DataFrame:
+    """What does a property's own transaction history buy, measured like any other group?
+
+    Delivered as an ablation rather than asserted, on the same gate and the same protocol as
+    the crime study, so the two verdicts are directly comparable.
+    """
+    available = [c for c in PRIOR_SALE_FEATURES if c in variants["capped"].columns]
+    if not available:
+        raise KeyError(
+            "No prior-sale columns in the model frame. Run add_prior_sale_features first."
+        )
+
+    designs = {
+        "No prior sale": [],
+        "Prior price only": [c for c in ("prev_sale_price", "has_prev_sale") if c in available],
+        "Prior price + elapsed": [c for c in (
+            "prev_sale_price", "has_prev_sale", "years_since_prev_sale",
+            "prev_sale_days_since_start") if c in available],
+        "Full prior-sale group": available,
+    }
+    return _seeded_design_study(splits, variants, cfg, val_eval, FEATURES, designs, seeds,
+                                baseline="No prior sale", label="Prior-sale features")
