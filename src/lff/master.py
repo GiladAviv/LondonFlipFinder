@@ -2,26 +2,31 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    import geopandas as gpd
 
 from .config import Config
 from .spatial import (
     add_borough,
     add_distance_to_centre,
+    add_lsoa,
     add_nearest_distance,
     split_station_networks,
     to_projected_gdf,
 )
 
-PIPELINE_VERSION = 4  # bump whenever build_master_table's logic changes
+PIPELINE_VERSION = 5  # bump whenever build_master_table's logic changes
 
 
-def _cache_key(cfg: Config) -> str:
+def _cache_key(cfg: Config, with_lsoa: bool) -> str:
     """Identity of a cached table: the pipeline logic plus every filter that shaped it."""
     return json.dumps({
         "pipeline_version": PIPELINE_VERSION, "year_min": cfg.year_min, "year_max": cfg.year_max,
-        "min_price_per_sqm": cfg.min_price_per_sqm,
+        "min_price_per_sqm": cfg.min_price_per_sqm, "lsoa_crime": with_lsoa,
     }, sort_keys=True)
 
 
@@ -32,11 +37,19 @@ def build_master_table(
     rates: pd.DataFrame,
     stations: pd.DataFrame,
     use_cache: bool = True,
+    lsoa_crime: pd.DataFrame | None = None,
+    lsoa_boundaries: gpd.GeoDataFrame | None = None,
 ) -> pd.DataFrame:
-    """Join houses + stations + boroughs + crime + rates into one chronologically sorted table."""
+    """Join houses + stations + boroughs + crime + rates into one chronologically sorted table.
+
+    Passing `lsoa_crime` and `lsoa_boundaries` additionally joins crime at LSOA grain, on the
+    same one-month lag as the borough series. Section 8.2 uses both to ask whether the crime
+    ablation's verdict survives a 147x increase in spatial resolution.
+    """
+    with_lsoa = lsoa_crime is not None and lsoa_boundaries is not None
     key_path = cfg.cache_parquet.with_suffix(".key.json")
     if use_cache and cfg.cache_parquet.exists() and key_path.exists():
-        if key_path.read_text() == _cache_key(cfg):
+        if key_path.read_text() == _cache_key(cfg, with_lsoa):
             cached = pd.read_parquet(cfg.cache_parquet)
             print(f"Loaded cached master table: {cached.shape}")
             return cached
@@ -56,6 +69,8 @@ def build_master_table(
     gdf_houses = add_nearest_distance(gdf_houses, gdf_transit, "distance_to_transit_m")
     gdf_houses = add_distance_to_centre(gdf_houses, cfg)
     gdf_houses = add_borough(gdf_houses, cfg)
+    if with_lsoa:
+        gdf_houses = add_lsoa(gdf_houses, lsoa_boundaries)
 
     df = pd.DataFrame(gdf_houses.drop(columns="geometry"))
     df["price_per_sqm"] = df["price"] / df["floorAreaSqM"]
@@ -67,6 +82,14 @@ def build_master_table(
         crime, left_on=["_crime_key", "borough"], right_on=["date", "borough"],
         how="left", suffixes=("", "_crime"),
     ).drop(columns=["_crime_key", "date_crime"], errors="ignore")
+
+    if with_lsoa:
+        # Same one-month lag as the borough join, so the two grains are directly comparable
+        # and neither can see the month it is predicting.
+        df = df.assign(_crime_key=crime_key).merge(
+            lsoa_crime, left_on=["_crime_key", "lsoa_code"], right_on=["date", "lsoa_code"],
+            how="left", suffixes=("", "_lsoa"),
+        ).drop(columns=["_crime_key", "date_lsoa"], errors="ignore")
 
     # Crime stays NaN where no lagged window exists (e.g. 2008, before 12 months of
     # history accumulate). Median-filling here would inject a statistic computed over the
@@ -88,6 +111,6 @@ def build_master_table(
     df = df.sort_values("date").reset_index(drop=True)
     cfg.artifact_dir.mkdir(parents=True, exist_ok=True)
     df.to_parquet(cfg.cache_parquet, index=False)
-    key_path.write_text(_cache_key(cfg))
+    key_path.write_text(_cache_key(cfg, with_lsoa))
     print(f"Master table: {df.shape}  ({df['date'].min():%Y-%m} to {df['date'].max():%Y-%m})")
     return df

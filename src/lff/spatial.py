@@ -102,6 +102,36 @@ def add_borough(gdf: gpd.GeoDataFrame, cfg: Config) -> gpd.GeoDataFrame:
     return joined
 
 
+def add_lsoa(gdf: gpd.GeoDataFrame, boundaries: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Point-in-polygon join onto LSOA (2011) boundaries -- the crime file's native grain.
+
+    Same shape as `add_borough`, against 4,835 polygons instead of 33.
+    """
+    if gdf.crs != boundaries.crs:
+        raise ValueError(f"CRS mismatch: {gdf.crs} vs {boundaries.crs}")
+
+    joined = gpd.sjoin(
+        gdf.drop(columns=["index_right", "index_left", "LSOA11CD", "lsoa_code"],
+                 errors="ignore"),
+        boundaries[["LSOA11CD", "geometry"]],
+        how="left",
+        predicate="within",
+    )
+    joined = joined.rename(columns={"LSOA11CD": "lsoa_code"})
+    joined = joined.drop(columns=["index_right"], errors="ignore")
+
+    # A property on a boundary line can match two polygons; keep the first and note it.
+    duplicated = joined.index.duplicated()
+    if duplicated.any():
+        print(f"   {duplicated.sum():,} properties matched two LSOA polygons "
+              f"(boundary-line coordinates); keeping the first")
+        joined = joined[~duplicated]
+
+    unmatched = joined["lsoa_code"].isna().sum()
+    print(f"LSOA join: {len(joined) - unmatched:,} matched, {unmatched:,} unmatched")
+    return joined
+
+
 def add_distance_to_centre(gdf: gpd.GeoDataFrame, cfg: Config) -> gpd.GeoDataFrame:
     """Straight-line metres to Charing Cross, the conventional centre of London."""
     centre = (

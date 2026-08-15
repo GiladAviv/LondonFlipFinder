@@ -80,12 +80,35 @@ class Config:
         return self.data_dir / "London_Wards" / "Boroughs" / "London_Borough_Excluding_MHW.shp"
 
     @property
+    def schools_csv(self) -> Path:
+        scorecards = self.data_dir / "local-authority-school-places-scorecards_2022" / "data"
+        return scorecards / (
+            "06_quality_of_school_places_added_between_1_may_2021_and_1_may_2022_"
+            "ofsted_school_level.csv"
+        )
+
+    @property
     def cache_parquet(self) -> Path:
         return self.artifact_dir / "master_table.parquet"
 
     @property
     def required_files(self) -> list[Path]:
         return [self.houses_csv, self.crime_csv, self.boe_csv, self.stations_csv, self.boroughs_shp]
+
+    # --- third-party sources, fetched on demand and cached -------------------
+    # Kept apart from data_dir: that directory is the release archive, reproduced byte for byte
+    # from GitHub. These are fetched live from ONS/DfE and are cached, not distributed.
+    @property
+    def external_dir(self) -> Path:
+        return self.data_dir.parent / "external"
+
+    @property
+    def lsoa_boundaries(self) -> Path:
+        return self.external_dir / "lsoa_2011_london.gpkg"
+
+    @property
+    def gias_schools(self) -> Path:
+        return self.external_dir / "gias_schools.csv"
 
     # --- iteration budgets ---------------------------------------------------
     @property

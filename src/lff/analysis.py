@@ -1,4 +1,4 @@
-"""Diagnostics and design studies. Sections 12.2, 14.1, 14.3-14.5."""
+"""Diagnostics and design studies. Sections 12.2, 14.1, 14.3-14.5, and the crime study (8.2)."""
 from __future__ import annotations
 
 import numpy as np
@@ -6,7 +6,8 @@ import pandas as pd
 import xgboost as xgb
 
 from .config import Config
-from .features.registry import FEATURES
+from .crime import LSOA_CRIME_FEATURES
+from .features.registry import BOROUGH_CRIME_FEATURES, FEATURES
 from .metrics import ModelBundle, ResultsRegistry, regression_metrics
 from .models import detrend, fit_market_deflator, market_level, retrend
 from .split import Splits
@@ -158,3 +159,90 @@ def ablation_study(splits: Splits, variants: dict[str, pd.DataFrame],
     frame = pd.DataFrame(rows)
     frame["MdAPE delta"] = frame["MdAPE"] - frame.loc[0, "MdAPE"]
     return frame
+
+
+def crime_resolution_study(splits: Splits, variants: dict[str, pd.DataFrame], cfg: Config,
+                           val_eval: pd.DataFrame,
+                           seeds: tuple[int, ...] = (42,)) -> pd.DataFrame:
+    """Is the +0.01 pp verdict on crime a verdict on crime, or only on borough-grain crime?
+
+    Same recipe, same rows, same target as `ablation_study` -- the only thing that varies is
+    which crime columns are in the feature matrix. Every variant is scored on validation,
+    because this decides whether the 2008-2016 window survives and decisions do not read test.
+
+    The frames must already carry the LSOA crime columns; `build_master_table` attaches them
+    when it is handed an `lsoa_crime` table.
+    """
+    train_df = variants["capped"]
+    deflator = fit_market_deflator(train_df)
+    base = [f for f in FEATURES if f not in BOROUGH_CRIME_FEATURES]
+
+    lsoa_available = [c for c in LSOA_CRIME_FEATURES if c in train_df.columns]
+    if not lsoa_available:
+        raise KeyError(
+            "No LSOA crime columns in the model frame. Pass lsoa_crime to build_master_table."
+        )
+    by_category = [c for c in lsoa_available if c.startswith("lsoa_crime_")
+                   and not c.startswith("lsoa_crime_density")]
+
+    designs = {
+        "No crime": [],
+        "Borough count (status quo)": BOROUGH_CRIME_FEATURES,
+        "LSOA total": ["lsoa_crime_prev_12m"],
+        "LSOA by category": by_category,
+        "LSOA + density": [*by_category, "lsoa_crime_density_prev_12m"],
+        "Borough + LSOA": [*BOROUGH_CRIME_FEATURES, *lsoa_available],
+    }
+
+    def frame_for(part: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+        X = part[columns].copy()
+        for col, dtype in splits.category_dtypes.items():
+            if col in X.columns:
+                X[col] = X[col].astype(dtype)
+        return X
+
+    # The deflator reads market_median_rolling_3m, which is in `base` for every variant, so the
+    # label is identical throughout. Only the inputs move.
+    X_train_lvl, X_val_lvl = splits.features(train_df), splits.features(val_eval)
+    y_train = detrend(splits.target(train_df), market_level(X_train_lvl, deflator))
+
+    # Every design is refit under each seed, and the gain is computed *within* a seed before
+    # averaging. A single fit cannot separate a real effect from seed noise, and this study
+    # decides whether the 2008-2016 window survives -- too consequential to read off one run.
+    per_seed: dict[str, dict[int, float]] = {name: {} for name in designs}
+    for seed in seeds:
+        for name, crime_cols in designs.items():
+            columns = base + crime_cols
+            X_train, X_val = frame_for(train_df, columns), frame_for(val_eval, columns)
+            y_val = detrend(splits.target(val_eval), market_level(X_val_lvl, deflator))
+
+            model = xgb.XGBRegressor(
+                n_estimators=cfg.n_estimators, max_depth=8, learning_rate=0.03,
+                subsample=0.8, colsample_bytree=0.8, enable_categorical=True,
+                tree_method="hist", objective="reg:absoluteerror", early_stopping_rounds=50,
+                random_state=seed, n_jobs=-1,
+            )
+            model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+
+            predicted = retrend(model.predict(X_val), market_level(X_val_lvl, deflator))
+            metrics = regression_metrics(splits.target(val_eval), predicted)
+            per_seed[name][seed] = metrics["MdAPE"]
+            print(f"  seed {seed}  {name:<28}{len(crime_cols):>2} cols   "
+                  f"MdAPE {metrics['MdAPE']:6.3f}%")
+
+    rows = []
+    for name, crime_cols in designs.items():
+        scores = np.array([per_seed[name][s] for s in seeds])
+        # Paired against the same seed, so seed-level variation cancels instead of adding.
+        gains = np.array([per_seed["No crime"][s] - per_seed[name][s] for s in seeds])
+        rows.append({
+            "Crime features": name,
+            "Columns": len(crime_cols),
+            "MdAPE mean": scores.mean(),
+            "MdAPE sd": scores.std(ddof=1) if len(seeds) > 1 else np.nan,
+            "Gain vs. no crime": gains.mean(),
+            "Gain sd": gains.std(ddof=1) if len(seeds) > 1 else np.nan,
+            "Seeds won": int((gains > 0).sum()),
+            "Seeds": len(seeds),
+        })
+    return pd.DataFrame(rows)
