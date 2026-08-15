@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "london-flip-finder"
-version = "2.0.0"
-description = "Valuation and mispricing detection for the London residential market (2008-2016)."
+version = "3.0.0"
+description = "Valuation and mispricing detection for the London residential market."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -38,7 +38,13 @@ dependencies = [
 
 [project.optional-dependencies]
 notebook = ["jupyterlab==4.5.10", "ipykernel==6.31.0", "nbformat==5.10.4", "nbconvert==7.17.1"]
-dev = ["ruff==0.9.6", "nbstripout==0.8.1"]
+dev = ["ruff==0.9.6", "nbstripout==0.8.1", "pytest==8.3.4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [project.urls]
 Repository = "https://github.com/GiladAviv/LondonFlipFinder"

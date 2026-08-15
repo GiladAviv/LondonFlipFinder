@@ -7,7 +7,35 @@ macroeconomic context, then applies **conformal prediction** to derive a statist
 price floor. A listing priced below that floor is flagged as a **flip candidate** — with a
 quantified margin of safety rather than a hunch.
 
-The entire project is one notebook: [`london_flip_finder.ipynb`](london_flip_finder.ipynb).
+The pipeline lives in [`src/lff/`](src/lff/); [`london_flip_finder.ipynb`](london_flip_finder.ipynb)
+is the narrative layer that drives it and carries the analysis.
+
+---
+
+## Layout
+
+```
+src/lff/                  the pipeline, one module per stage
+  config.py               paths, tunables, seeding                    (§2)
+  ingest.py               dataset download and raw reads              (§3-4)
+  clean.py                per-source cleaning                         (§5)
+  spatial.py              projection, k-d tree and polygon joins      (§6)
+  master.py               the joined master table                     (§7)
+  features/               temporal, market, and the feature registry  (§9)
+  split.py                chronological split, encoding, variants     (§10)
+  metrics.py              one metric implementation, one registry     (§11)
+  models.py               trainers, deflators, mixture-of-experts     (§12)
+  analysis.py             diagnostics and design studies              (§12.2, §14)
+  conformal.py            conformal bound and flip scanner            (§15)
+  plots.py                every figure
+  persist.py              run artifacts and self-checks               (§16-17)
+tests/                    pytest suite over a committed 500-row fixture
+london_flip_finder.ipynb  narrative, EDA, results
+artifacts/                written by a run: model, manifest, leaderboard
+```
+
+Section numbers refer to the notebook, which reads top to bottom as the argument; the modules
+hold the machinery it calls.
 
 ---
 
@@ -20,6 +48,7 @@ cd LondonFlipFinder
 python3 -m venv venv
 ./venv/bin/pip install -U pip setuptools wheel
 ./venv/bin/pip install -r requirements.txt
+./venv/bin/pip install -e .
 ./venv/bin/python -m ipykernel install --user \
     --name london-flip-finder --display-name "London Flip Finder"
 
@@ -28,7 +57,8 @@ python3 -m venv venv
 
 Then run the notebook top to bottom. **No manual data setup is required** — section 3 downloads
 the 220 MB dataset archive from [Releases](https://github.com/GiladAviv/LondonFlipFinder/releases/tag/v1.0.0)
-and extracts it to `data/` on first run, and skips the download on every run after that.
+and extracts it to `data/` (1.8 GB on disk) on first run, and skips the download on every run
+after that.
 
 Requires Python ≥ 3.9. Verified on 3.9.25.
 
@@ -46,6 +76,19 @@ LFF_FAST_MODE=1 ./venv/bin/jupyter nbconvert --to notebook --execute \
 ```
 
 A non-zero exit means a stage broke or one of the section 17 self-checks failed.
+
+### Tests
+
+```bash
+./venv/bin/python -m pytest tests/ -q
+```
+
+Runs in about two seconds against a committed 500-row fixture. The suite covers the leakage
+probes that section 17 runs at the end of a full pipeline run — that a lagged market feature
+cannot move when its own month is shocked tenfold, that the Bank Rate curve never back-fills a
+rate onto dates before it was announced, that the target encoder falls back to the global mean
+for categories absent from training — plus unit coverage of zone parsing, the crime window,
+the metrics and the conformal bound.
 
 ### Configuration
 
@@ -70,7 +113,7 @@ GitHub Release ──► data/ ──► load ──► clean ──► spatial 
              temporal + market features (all strictly lagged)
                               │
                               ▼
-              chronological split  ──  70% train / 15% val / 15% test
+     chronological split ── 60% train / 15% val / 10% calib / 15% test
                               │
         ┌─────────────────────┼─────────────────────┐
         ▼                     ▼                     ▼
@@ -341,7 +384,7 @@ memorisation effect, and one that has recurred with the same sign (though differ
 across every model change in this project, unlike the single-iteration flip seen earlier. That is
 mild evidence it is a stable property of the data (repeat sales genuinely are easier to value)
 rather than noise tied to any one model. Even the *harder*, unseen-property subset — the number
-that generalises to new stock — sits at 14.06 % MdAPE, comfortably better than every non-detrended
+that generalises to new stock — sits at 13.96 % MdAPE, comfortably better than every non-detrended
 model's *blended* headline figure. A group-aware split (improvement 1 below) would remove the
 remaining ambiguity.
 

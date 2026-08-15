@@ -1,0 +1,160 @@
+"""Diagnostics and design studies. Sections 12.2, 14.1, 14.3-14.5."""
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+import xgboost as xgb
+
+from .config import Config
+from .features.registry import FEATURES
+from .metrics import ModelBundle, ResultsRegistry, regression_metrics
+from .models import detrend, fit_market_deflator, market_level, retrend
+from .split import Splits
+
+
+def extrapolation_bias(names: list[str], part: pd.DataFrame, split_label: str,
+                       splits: Splits, bundles: dict[str, ModelBundle]) -> pd.DataFrame:
+    """Mean signed residual per model: the fingerprint of a level error, not of noise.
+
+    A model that merely predicts imprecisely scatters residuals around zero. A model that cannot
+    extrapolate a trend sits systematically below the truth, so the MEAN residual -- not its
+    absolute value -- is the quantity that separates the two failure modes.
+    """
+    actual = splits.target(part).to_numpy(dtype=float)
+    rows = []
+    for name in names:
+        if name not in bundles:
+            continue
+        residuals = actual - bundles[name].predict(splits.features(part))
+        rows.append({
+            "Model": name,
+            f"Mean residual ({split_label})": residuals.mean(),
+            "Median residual": float(np.median(residuals)),
+            "Under-predicted %": float((residuals > 0).mean() * 100),
+        })
+    return pd.DataFrame(rows)
+
+
+def repeat_property_diagnostic(bundle: ModelBundle, splits: Splits,
+                               test_eval: pd.DataFrame) -> pd.DataFrame:
+    """Split test performance by whether the property also appears in the training data."""
+    seen = set(splits.train["fullAddress"])
+    is_seen = test_eval["fullAddress"].isin(seen)
+
+    rows = []
+    for label, mask in (("Seen in training", is_seen), ("Unseen property", ~is_seen)):
+        part = test_eval[mask]
+        if part.empty:
+            continue
+        metrics = regression_metrics(splits.target(part), bundle.predict(splits.features(part)))
+        rows.append({"Test subset": label, "Rows": len(part), **metrics})
+
+    frame = pd.DataFrame(rows)
+    overlap = is_seen.mean() * 100
+    print(f"{overlap:.1f}% of test transactions are properties that also appear in training "
+          f"({is_seen.sum():,} of {len(test_eval):,}).")
+    if len(frame) == 2:
+        gap = frame.loc[0, "MdAPE"] - frame.loc[1, "MdAPE"]
+        print(f"MdAPE gap between seen and unseen properties: {gap:+.2f} percentage points.")
+    return frame[["Test subset", "Rows", "MdAPE", "MAE", "R2", "within_25pct"]]
+
+
+def summarise_target_transform(registry: ResultsRegistry) -> pd.DataFrame:
+    """Pull the regular vs. market vs. borough rows for a focused comparison -- computed from
+    what was actually trained, not hand-typed.
+
+    Both splits are shown, but only the validation column is used to pick a winner below. The
+    test column is disclosure, so a reader can see whether the validation-based choice held up.
+    """
+    val_rows, test_rows = registry.frame("val"), registry.frame("test")
+    combos = [
+        ("XGBoost", "XGBoost (capped)", "XGBoost detrended-market (capped)",
+         "XGBoost detrended-borough (capped)"),
+        ("CatBoost", "CatBoost (cleaned)", "CatBoost detrended-market (cleaned)",
+         "CatBoost detrended-borough (cleaned)"),
+    ]
+    rows = []
+    for backend, regular, market, borough in combos:
+        for label, name in (("regular", regular), ("market-wide", market),
+                            ("borough-scaled", borough)):
+            val_match = val_rows[val_rows["Model"] == name]
+            test_match = test_rows[test_rows["Model"] == name]
+            if val_match.empty:
+                continue
+            row = {"Backend": backend, "Target transform": label,
+                   "Validation MdAPE": val_match.iloc[0]["MdAPE"]}
+            if not test_match.empty:
+                row["Test MdAPE"] = test_match.iloc[0]["MdAPE"]
+                row["Test MAE"] = test_match.iloc[0]["MAE"]
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def check_moe_necessity(registry: ResultsRegistry, single_model: str) -> pd.DataFrame:
+    """Compare each detrended MoE variant against the single detrended model it is built from."""
+    board = registry.frame("test")
+    names = {
+        "Single model": single_model,
+        "MoE - luxury routing detrended (XGB)": "MoE - luxury routing detrended (XGB)",
+        "MoE - error routing detrended (XGB)": "MoE - error routing detrended (XGB)",
+        "3-seed average detrended (XGB)": "3-seed average detrended (XGB)",
+    }
+    rows = []
+    for label, model_name in names.items():
+        match = board[board["Model"] == model_name]
+        if match.empty:
+            continue
+        row = match.iloc[0]
+        rows.append({"Variant": label, "Test MdAPE": row["MdAPE"], "Test MAE": row["MAE"],
+                    "Test R2": row["R2"]})
+    frame = pd.DataFrame(rows)
+    baseline = frame.loc[frame["Variant"] == "Single model", "Test MdAPE"].iloc[0]
+    frame["MdAPE delta vs. single model"] = frame["Test MdAPE"] - baseline
+    return frame
+
+
+def ablation_study(splits: Splits, variants: dict[str, pd.DataFrame],
+                   groups: dict[str, list[str]], cfg: Config,
+                   val_eval: pd.DataFrame) -> pd.DataFrame:
+    """Retrain the winning detrended recipe with each feature group removed in turn.
+
+    Scored on VALIDATION, not test: this study's output feeds a decision (which features to keep,
+    and whether the 2008-2016 window is worth its cost), and decisions must never read the test
+    set. The models early-stop on validation too, so the absolute level here is optimistic -- but
+    every variant carries that bias identically and the gate below consumes only the *delta*.
+    """
+    train_df = variants["capped"]          # same variant as the winning single model
+    deflator = fit_market_deflator(train_df)
+
+    def fit_and_score(name: str, drop: list[str]) -> dict:
+        keep = [f for f in FEATURES if f not in drop]
+
+        # The deflator is part of the target transform, not an input feature, so it is always
+        # computed from the full feature frame. That keeps the label identical across every
+        # variant -- only the model's *inputs* change, which is what an ablation should isolate.
+        X_train_full, X_val_full = splits.features(train_df), splits.features(val_eval)
+        y_train = detrend(splits.target(train_df), market_level(X_train_full, deflator))
+        y_val = detrend(splits.target(val_eval), market_level(X_val_full, deflator))
+
+        model = xgb.XGBRegressor(
+            n_estimators=cfg.n_estimators, max_depth=8, learning_rate=0.03,
+            subsample=0.8, colsample_bytree=0.8, enable_categorical=True, tree_method="hist",
+            objective="reg:absoluteerror", early_stopping_rounds=50,
+            random_state=cfg.seed, n_jobs=-1,
+        )
+        model.fit(X_train_full[keep], y_train,
+                  eval_set=[(X_val_full[keep], y_val)], verbose=False)
+
+        predicted = retrend(model.predict(X_val_full[keep]), market_level(X_val_full, deflator))
+        metrics = regression_metrics(splits.target(val_eval), predicted)
+        print(f"{name:<16}{len(keep):>2} features   MdAPE {metrics['MdAPE']:6.2f}%   "
+              f"MAE \N{POUND SIGN}{metrics['MAE']:>10,.0f}")
+        return {"Variant": name, "Features": len(keep), **metrics}
+
+    rows = [fit_and_score("Full", [])]
+    for group_name, group_features in groups.items():
+        rows.append(fit_and_score(f"No {group_name}", group_features))
+
+    frame = pd.DataFrame(rows)
+    frame["MdAPE delta"] = frame["MdAPE"] - frame.loc[0, "MdAPE"]
+    return frame
