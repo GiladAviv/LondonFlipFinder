@@ -45,6 +45,31 @@ def display_frame(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     return df[df["price"] <= df["price"].quantile(0.95)].copy()
 
 
+def plot_price_clip_comparison(df: pd.DataFrame, cfg: Config) -> None:
+    """Full price distribution next to the 95th-percentile-clipped one, side by side.
+
+    Makes the display-only clip visible rather than just asserted: the full view is dominated
+    by a long right tail of multi-million-pound sales, which is exactly what every other EDA
+    chart in this notebook clips away.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+    sns.histplot(df["price"], bins=60, ax=axes[0], color=SERIES[0])
+    axes[0].set(title=f"Full data ({len(df):,} properties)", xlabel="Price", ylabel="Properties")
+    style_axis(axes[0], currency_x=True)
+
+    clipped = display_frame(df, cfg)
+    sns.histplot(clipped["price"], bins=40, ax=axes[1], color=SERIES[0])
+    axes[1].set(title=f"Clipped to 95th percentile ({len(clipped):,} properties)",
+                xlabel="Price", ylabel="Properties")
+    style_axis(axes[1], currency_x=True)
+
+    fig.suptitle("Why EDA charts clip: the same price data, two ways",
+                 fontsize=15, fontweight="bold")
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_property_characteristics(df: pd.DataFrame, cfg: Config) -> None:
     """Physical drivers of price: distribution, scale, asset type, and inter-correlation."""
     vis = display_frame(df, cfg)

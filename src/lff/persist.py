@@ -137,6 +137,15 @@ def run_self_checks(splits: Splits, cfg: Config, bundle: ModelBundle,
     check("raw station table intact", "EASTING" in raw["stations"].columns
           and len(raw["stations"]) > 0, f"{len(raw['stations'])} stations still loaded")
 
+    # Prior-sale features read the property's own past, which is legitimate -- but only while
+    # "past" holds. A single row whose matched sale is dated on or after its own sale date
+    # would be reading the target, so this is asserted rather than reported.
+    if "prev_sale_date" in splits.train.columns:
+        matched = master[master.get("has_prev_sale", 0) == 1]
+        offending = int((matched["prev_sale_date"] >= matched["date"]).sum())
+        check("prior sales strictly precede the row that reads them", offending == 0,
+              f"{len(matched):,} rows carry a prior sale, {offending} dated at or after their own")
+
     check("no target leakage in feature list",
           not any(f.startswith(("saleEstimate", "rentEstimate", "price_per_sqm"))
                   for f in FEATURES),

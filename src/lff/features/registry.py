@@ -1,6 +1,8 @@
 """The feature contract: what the models see, and how the groups ablate."""
 from __future__ import annotations
 
+from .prior_sale import PRIOR_SALE_ADOPTED
+
 FEATURES = [
     "floorAreaSqM", "total_rooms", "avg_room_size", "bathrooms",
     "distance_to_underground_m", "distance_to_transit_m", "station_zone",
@@ -9,6 +11,7 @@ FEATURES = [
     "propertyType", "tenure", "borough", "outcode", "currentEnergyRating",
     "days_since_start", "month_sin", "month_cos",
     "market_median_rolling_3m", "market_median_rolling_12m", "lagged_borough_median_sqm",
+    *PRIOR_SALE_ADOPTED,
 ]
 
 
@@ -28,6 +31,7 @@ FEATURE_GROUPS = {
     "macro": ["interest_rate"],
     "market lags": ["market_median_rolling_3m", "market_median_rolling_12m",
                     "lagged_borough_median_sqm"],
+    "prior sales": PRIOR_SALE_ADOPTED,
 }
 
 

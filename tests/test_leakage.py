@@ -52,8 +52,8 @@ def test_rate_curve_never_backfills(cfg):
     assert daily.loc[daily["date"] == "2016-08-04", "interest_rate"].iloc[0] == 0.25
 
 
-def test_splits_are_chronologically_disjoint(master, cfg):
-    df = add_market_features(add_temporal_features(master))
+def test_splits_are_chronologically_disjoint(model_frame, cfg):
+    df = model_frame
     splits = chronological_split(df, cfg)
 
     assert splits.train["date"].max() <= splits.val["date"].min()
@@ -63,11 +63,10 @@ def test_splits_are_chronologically_disjoint(master, cfg):
     assert total == len(df), "splits must partition the frame, not sample from it"
 
 
-def test_encoder_is_fitted_on_training_rows_only(master, cfg):
+def test_encoder_is_fitted_on_training_rows_only(model_frame, cfg):
     """A category that appears only after the training window must fall back to the global
     mean, not acquire a value derived from its own (future) rows."""
-    df = add_market_features(add_temporal_features(master))
-    splits = chronological_split(df, cfg)
+    splits = chronological_split(model_frame, cfg)
 
     unseen = pd.DataFrame({c: ["__never_seen__"] for c in CATEGORICAL_FEATURES})
     for col in FEATURES:
@@ -79,9 +78,8 @@ def test_encoder_is_fitted_on_training_rows_only(master, cfg):
         assert encoded[col].iloc[0] == splits.encoder.global_mean_
 
 
-def test_categorical_levels_are_pinned_from_training(master, cfg):
-    df = add_market_features(add_temporal_features(master))
-    splits = chronological_split(df, cfg)
+def test_categorical_levels_are_pinned_from_training(model_frame, cfg):
+    splits = chronological_split(model_frame, cfg)
     encoded = splits.features(splits.val)
     for col in CATEGORICAL_FEATURES:
         assert encoded[col].dtype == splits.category_dtypes[col]

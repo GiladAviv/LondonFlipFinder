@@ -28,11 +28,6 @@ LSOA_SERVICE = (
 # out-of-London LSOAs costs nothing and guarantees no edge property goes unmatched.
 LONDON_BBOX = "-0.55,51.25,0.35,51.72"
 
-GIAS_URL = (
-    "https://ea-edubase-api-prod.azurewebsites.net/edubase/downloads/public/"
-    "edubasealldata{date}.csv"
-)
-
 
 def _provenance(path: Path, url: str, rows: int) -> None:
     """Record where a cached file came from and when."""
@@ -98,44 +93,3 @@ def fetch_lsoa_boundaries(cfg: Config, refresh: bool = False) -> gpd.GeoDataFram
     _provenance(cfg.lsoa_boundaries, LSOA_SERVICE, len(gdf))
     print(f"LSOA boundaries: {len(gdf):,} areas cached to {cfg.lsoa_boundaries.name}")
     return gdf
-
-
-def fetch_gias_schools(cfg: Config, refresh: bool = False) -> pd.DataFrame:
-    """DfE Get Information about Schools: URN -> coordinates.
-
-    The local scorecard carries the Ofsted grade and its inspection date but no location;
-    GIAS carries the location but not the grade. Joined on URN they give a school-quality
-    surface that can be read as of any sale date.
-    """
-    if cfg.gias_schools.exists() and not refresh:
-        df = pd.read_csv(cfg.gias_schools)
-        print(f"GIAS schools (cached): {len(df):,} schools")
-        return df
-
-    cfg.external_dir.mkdir(parents=True, exist_ok=True)
-    columns = ["URN", "EstablishmentName", "Postcode", "Easting", "Northing",
-               "PhaseOfEducation (name)", "EstablishmentStatus (name)", "OpenDate", "CloseDate"]
-
-    # GIAS publishes a dated file each day and keeps no "latest" alias; walk back until one
-    # resolves rather than pinning a date that will 404 in a month.
-    today = pd.Timestamp.now(tz="UTC").normalize()
-    last_error: Exception | None = None
-    for back in range(0, 14):
-        url = GIAS_URL.format(date=(today - pd.Timedelta(days=back)).strftime("%Y%m%d"))
-        try:
-            resp = requests.get(url, timeout=300)
-            resp.raise_for_status()
-            path = cfg.external_dir / "gias_raw.csv"
-            path.write_bytes(resp.content)
-            df = pd.read_csv(path, encoding="latin-1", low_memory=False)
-            keep = [c for c in columns if c in df.columns]
-            df = df[keep]
-            df.to_csv(cfg.gias_schools, index=False)
-            path.unlink()
-            _provenance(cfg.gias_schools, url, len(df))
-            print(f"GIAS schools: {len(df):,} establishments from {url.rsplit('/', 1)[-1]}")
-            return df
-        except Exception as exc:  # noqa: BLE001 - any failure means try the previous day
-            last_error = exc
-
-    raise RuntimeError(f"No GIAS snapshot resolved in the last 14 days: {last_error}")

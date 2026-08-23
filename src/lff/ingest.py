@@ -50,9 +50,6 @@ def ensure_dataset(cfg: Config) -> None:
     print(f"Dataset ready in {cfg.data_dir}")
 
 
-LOAD_OPTIONAL = False  # postcode-geo + school scorecards: loaded by the original, never used
-
-
 HOUSE_COLUMNS = [
     "fullAddress", "postcode", "outcode", "latitude", "longitude",
     "bathrooms", "bedrooms", "livingRooms", "floorAreaSqM",
@@ -73,13 +70,6 @@ def load_raw(cfg: Config) -> dict[str, pd.DataFrame]:
     stations = pd.read_csv(cfg.stations_csv)
 
     raw = {"houses": houses, "crime": crime, "boe": boe, "stations": stations}
-
-    if LOAD_OPTIONAL:  # pragma: no cover - opt-in path
-        raw["postcodes"] = pd.read_csv(cfg.data_dir / "open_postcode_geo.csv", low_memory=False)
-        scorecards = sorted(
-            (cfg.data_dir / "local-authority-school-places-scorecards_2022" / "data").glob("*.csv")
-        )
-        raw["schools"] = pd.read_csv(scorecards[0], low_memory=False)
 
     print(f"Loaded {len(raw)} sources in {time.time() - started:.1f}s")
     for name, frame in raw.items():

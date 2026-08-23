@@ -1,9 +1,10 @@
 """A property's own transaction history.
 
-The source file is a price *history*: 418,201 rows covering 137,760 unique addresses, with
-75.4% of addresses recording two or more sales. The pipeline treats every row as an
-independent transaction and uses none of that structure, even though 61.1% of in-window sales
-have an earlier sale of the same property somewhere in the file.
+The source file is a price *history*: 418,201 rows covering 137,760 unique addresses. Once the
+exact duplicates are removed 314,895 distinct sales remain, and 66.0% of addresses still record
+two or more of them. The pipeline treats every row as an independent transaction and uses none
+of that structure, even though 61.1% of in-window sales have an earlier sale of the same
+property somewhere in the file.
 
 The omission is expensive. Predicting a sale as nothing more than its own previous price scaled
 by a crude market index -- no model, no features, one line of arithmetic -- lands at 15.64%
@@ -29,6 +30,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+# Everything the module constructs -- the candidate set the section 14.6 ablation ranges over.
 PRIOR_SALE_FEATURES = [
     "prev_sale_price",
     "log_prev_sale_price",
@@ -36,6 +38,18 @@ PRIOR_SALE_FEATURES = [
     "prev_sale_days_since_start",
     "n_prior_sales",
     "has_prev_sale",
+]
+
+# The four the ablation actually justified: +0.913 pp of validation MdAPE, winning all three
+# seeds. Carrying all six scores +0.894 pp, so log_prev_sale_price and n_prior_sales earn
+# nothing -- a tree splits on order, and the log of a feature it already has is the same
+# ordering. Prior price alone is worth +0.453 pp; the elapsed-time pair doubles that, which is
+# the point: a price is only interpretable against how long ago it was paid.
+PRIOR_SALE_ADOPTED = [
+    "prev_sale_price",
+    "has_prev_sale",
+    "years_since_prev_sale",
+    "prev_sale_days_since_start",
 ]
 
 

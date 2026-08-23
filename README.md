@@ -10,6 +10,23 @@ quantified margin of safety rather than a hunch.
 The pipeline lives in [`src/lff/`](src/lff/); [`london_flip_finder.ipynb`](london_flip_finder.ipynb)
 is the narrative layer that drives it and carries the analysis.
 
+## Related work
+
+None of the ingredients here are new on their own — hedonic valuation, repeat-sales history, and
+distribution-free prediction intervals each have a literature. What is specific to this project is
+the combination: a hedonic model of London stock in 2008–2016, given the property's own sale
+history, wrapped in a *one-sided* calibrated floor so the output is a screen a buyer can act on
+rather than a point estimate.
+
+| Work | What it is | Where it touches this project |
+|---|---|---|
+| Rosen (1974), [*Hedonic Prices and Implicit Markets*](https://www.journals.uchicago.edu/doi/10.1086/260169), JPE 82(1):34–55 | The theory that prices a differentiated good as a bundle of measured attributes, each carrying an implicit price. | The framing of §5–§9. Every feature — floor area, tenure, distance to a station, borough — is an attribute whose implicit price the model is estimating; the tree models just drop the linear-in-attributes assumption. |
+| Bailey, Muth & Nourse (1963), [*A Regression Method for Real Estate Price Index Construction*](https://www.semanticscholar.org/paper/A-Regression-Method-for-Real-Estate-Price-Index-Bailey-Muth/8384788b906b9cbde02c20fede181f7163fc29eb), JASA 58:933–942; extended by [Case & Shiller (1987)](https://www.nber.org/system/files/working_papers/w2506/w2506.pdf) | Repeat sales: use properties sold more than once to separate market movement from property quality, since the property is held fixed between the two sales. | Both halves of that idea are used here, in opposite directions. §12.1 divides out the market level to get a stationary target; §14.6 goes the other way and feeds the *previous sale price* back in as a feature — the single strongest signal in the data (+0.9 pp MdAPE). §14.1 also reports errors on repeat properties separately. |
+| Gibbons (2004), [*The Costs of Urban Property Crime*](https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1468-0297.2004.00254.x), Economic Journal 114(499):F441–F463 | A hedonic study of London specifically: criminal damage capitalises into prices (≈1% per tenth of a standard deviation in Inner London), burglary does not. | The closest prior work to §8.2 and §14.5, and it predicts what we find — a real but small effect that is category-dependent. Worth reading as the reason the crime block earns so little once location is already in the model, rather than as a contradiction of it. |
+| Lei, G'Sell, Rinaldo, Tibshirani & Wasserman (2018), [*Distribution-Free Predictive Inference for Regression*](https://arxiv.org/abs/1604.04173), JASA 113(523):1094–1111 | The reference treatment of split conformal prediction: finite-sample marginal coverage on top of any regressor, with no distributional assumptions. | §15 is split conformal with a *ratio* nonconformity score (actual/predicted) and only the lower tail kept, because a flip screen cares about the floor and not the ceiling. |
+| Romano, Patterson & Candès (2019), [*Conformalized Quantile Regression*](https://papers.nips.cc/paper/8613-conformalized-quantile-regression), NeurIPS 32:3538–3548 | Conformal intervals that adapt their width to the input, rather than one global correction. | The obvious next step for §15. The multiplier q here is a single constant across the whole market, so coverage holds on average but the floor is loose for easy properties and tight for hard ones. [MAPIE](https://github.com/scikit-learn-contrib/MAPIE) is the usual scikit-learn implementation of both this and the split method above. |
+| [Zillow Prize](https://www.zillow.com/z/info/zillow-prize/) (Kaggle, 2017–2019) | The largest public competition on automated valuation: 3,800+ teams predicting the Zestimate's log error; the winners improved on the benchmark by ~13%, and Zillow reports the national median error falling from ~4.5% to under 4%. | The practitioner reference point for §12–§14 — gradient-boosted ensembles over property, location and time features are what won there too. The error rates are *not* comparable to the 13.30% MdAPE here: a different market, no listing or interior data, and every transaction scored rather than on-market homes only. |
+
 ---
 
 ## Layout
@@ -98,8 +115,7 @@ the metrics and the conformal bound.
 | `LFF_FAST_MODE=1` | Shrink every model's iteration budget for a fast smoke run |
 
 Everything else — price caps, split ratios, the luxury threshold, the conformal α, the random
-seed — lives in the single frozen `Config` object in section 2. On Google Colab the data
-directory resolves to Google Drive automatically.
+seed — lives in the single frozen `Config` object in section 2.
 
 ---
 
@@ -139,8 +155,7 @@ GitHub Release ──► data/ ──► load ──► clean ──► spatial 
 
 **Deliberately excluded.** The source file carries `saleEstimate_*` and `rentEstimate_*` columns —
 a third party's model output for the same property. Using them to predict price would be target
-leakage. The 300 MB postcode-geo file and the school scorecards are not loaded either: the
-original notebook read both (costing ~1 GB of RAM) without either ever reaching a feature.
+leakage.
 
 **The station file is a problem the pipeline corrects, not ignores.** It is a February 2022
 network snapshot applied to 2008–2016 transactions. Used raw, 41 of its 471 stations are Elizabeth
@@ -448,7 +463,7 @@ which materially changed the reported results.
 | 6 | `df_tube` rebound inside an EDA cell, destroying the raw station table | Notebook could not be re-run top to bottom | Plot functions use locals; nothing rebinds global state |
 | 7 | `distance_to_center` computed as Euclidean distance in **degrees** | Distorted geography along the east–west axis | Computed in BNG metres |
 | 8 | Crime gaps filled with a median computed over the whole period | A statistic including the future injected into early rows | Left as NaN; each model imputes from training data |
-| 9 | 300 MB postcode file + school scorecards loaded, never used; empty cell; `target_encode()` defined but never called; one cell fully redundant with the next | ~1 GB of wasted RAM and dead code | Removed |
+| 9 | Empty cell; `target_encode()` defined but never called; one cell fully redundant with the next | Dead code | Removed |
 | 10 | Chart labels said "<£5M" where the cap was £4 M; three near-identical metric functions with inconsistent key spellings (`MdAPE` vs `MDAPE`); leaderboard assembled from hand-typed literals | Silent mislabelling | Labels derive from config; one metric function; leaderboard generated from a results registry |
 
 Two additions worth calling out:

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,15 +9,10 @@ import numpy as np
 
 
 def resolve_data_dir() -> Path:
-    """Locate the dataset directory: env var, then Colab Drive, then a local ./data folder."""
+    """Locate the dataset directory: env var, then a local ./data folder."""
     env = os.environ.get("LFF_DATA_DIR")
     if env:
         return Path(env).expanduser()
-    if "google.colab" in sys.modules:  # pragma: no cover - Colab only
-        from google.colab import drive
-
-        drive.mount("/content/drive")
-        return Path("/content/drive/MyDrive/data_for_ds_project")
     return Path.cwd() / "data" / "data_for_ds_project"
 
 
@@ -80,14 +74,6 @@ class Config:
         return self.data_dir / "London_Wards" / "Boroughs" / "London_Borough_Excluding_MHW.shp"
 
     @property
-    def schools_csv(self) -> Path:
-        scorecards = self.data_dir / "local-authority-school-places-scorecards_2022" / "data"
-        return scorecards / (
-            "06_quality_of_school_places_added_between_1_may_2021_and_1_may_2022_"
-            "ofsted_school_level.csv"
-        )
-
-    @property
     def cache_parquet(self) -> Path:
         return self.artifact_dir / "master_table.parquet"
 
@@ -105,10 +91,6 @@ class Config:
     @property
     def lsoa_boundaries(self) -> Path:
         return self.external_dir / "lsoa_2011_london.gpkg"
-
-    @property
-    def gias_schools(self) -> Path:
-        return self.external_dir / "gias_schools.csv"
 
     # --- iteration budgets ---------------------------------------------------
     @property
