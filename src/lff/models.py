@@ -298,16 +298,13 @@ def train_moe_luxury(train_df: pd.DataFrame, splits: Splits, cfg: Config,
                         "temperature": temperature, "imputer": imputer})
 
 
-def train_moe_error_driven(train_df: pd.DataFrame, splits: Splits, cfg: Config, variant: str,
-                           backend: str = "xgboost", target_transform: str = "log"
-                           ) -> tuple[ModelBundle, ModelBundle]:
-    """Three seed-diverse experts + a router that learns which one wins per property.
+def train_seed_average(train_df: pd.DataFrame, splits: Splits, cfg: Config, variant: str,
+                       backend: str = "xgboost", target_transform: str = "log") -> ModelBundle:
+    """Plain average of three seed-diverse experts -- an ensembling baseline for the MoE designs.
 
-    Returns the MoE *and* a plain average of the identical three experts -- the control that
-    tells you whether the routing added anything beyond ordinary ensembling. With
-    `target_transform="detrend-market"`, all three experts train on section 12.1's fix, so this
-    checks whether routing/averaging adds anything on top of the best single model, not on top
-    of a handicapped one.
+    With `target_transform="detrend-market"`, all three experts train on section 12.1's fix, so
+    this checks whether ensembling adds anything on top of the best single model, not on top of
+    a handicapped one.
     """
     X_train, y_train = splits.features(train_df), splits.target(train_df)
     deflator = fit_market_deflator(train_df) if target_transform == "detrend-market" else None
@@ -326,37 +323,15 @@ def train_moe_error_driven(train_df: pd.DataFrame, splits: Splits, cfg: Config, 
         _fit_expert(_make_expert(backend, seed, cfg, target_transform), backend, X_train, y_log)
         for seed in (10, 20, 30)
     ]
-    train_preds = np.column_stack([_predict_log(e, backend, X_train) for e in experts])
-    best_expert = np.argmin(np.abs(y_log[:, None] - train_preds), axis=1)
 
-    imputer = SimpleImputer(strategy="median").fit(splits.encoder.transform(X_train))
-    router = RandomForestClassifier(
-        n_estimators=150, max_depth=12, class_weight="balanced",
-        random_state=cfg.seed, n_jobs=-1,
-    ).fit(_router_transform(splits, imputer, X_train), best_expert)
-
-    def predict_moe(X: pd.DataFrame) -> np.ndarray:
-        weights = router.predict_proba(_router_transform(splits, imputer, X))
-        preds = np.column_stack([to_price(_predict_log(e, backend, X), X) for e in experts])
-        return (preds * weights).sum(axis=1)
-
-    def predict_mean(X: pd.DataFrame) -> np.ndarray:
+    def predict(X: pd.DataFrame) -> np.ndarray:
         preds = np.column_stack([to_price(_predict_log(e, backend, X), X) for e in experts])
         return preds.mean(axis=1)
 
     label = "XGB" if backend == "xgboost" else "CatBoost"
     suffix = " detrended" if target_transform == "detrend-market" else ""
-    counts = np.bincount(best_expert, minlength=3)
-    print(f"   {label} expert wins on training data: "
-          + ", ".join(f"E{i} {c:,}" for i, c in enumerate(counts)))
-
-    return (
-        ModelBundle(f"MoE - error routing{suffix} ({label})", variant, predict_moe,
-                    {"experts": experts, "router": router, "imputer": imputer,
-                     "backend": backend}),
-        ModelBundle(f"3-seed average{suffix} ({label})", variant, predict_mean,
-                    {"experts": experts, "backend": backend}),
-    )
+    return ModelBundle(f"3-seed average{suffix} ({label})", variant, predict,
+                       {"experts": experts, "backend": backend})
 
 
 def train_all(splits: Splits, variants: dict[str, pd.DataFrame], cfg: Config,
@@ -386,18 +361,14 @@ def train_all(splits: Splits, variants: dict[str, pd.DataFrame], cfg: Config,
     print("\n--- Mixture of Experts ---")
     register(train_moe_luxury(variants["cleaned"], splits, cfg, "cleaned"))
     for backend in ("xgboost", "catboost"):
-        moe, mean = train_moe_error_driven(variants["cleaned"], splits, cfg, "cleaned", backend)
-        register(moe)
-        register(mean)
+        register(train_seed_average(variants["cleaned"], splits, cfg, "cleaned", backend))
 
     print("\n--- Mixture of Experts on the best recipe (detrended, section 12.1) ---")
     # Same variant as the winning single model (capped), so this isolates one question: does
     # routing or averaging add anything on top of the best model, not on top of a handicapped one.
     register(train_moe_luxury(variants["capped"], splits, cfg, "capped", "detrend-market"))
-    moe_d, mean_d = train_moe_error_driven(variants["capped"], splits, cfg, "capped",
-                                           "xgboost", "detrend-market")
-    register(moe_d)
-    register(mean_d)
+    register(train_seed_average(variants["capped"], splits, cfg, "capped",
+                                "xgboost", "detrend-market"))
 
     print(f"\nTrained {len(bundles)} models in {time.time() - started:.0f}s")
     return bundles

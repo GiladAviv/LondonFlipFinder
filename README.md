@@ -10,6 +10,32 @@ quantified margin of safety rather than a hunch.
 The pipeline lives in [`src/lff/`](src/lff/); [`london_flip_finder.ipynb`](london_flip_finder.ipynb)
 is the narrative layer that drives it and carries the analysis.
 
+<details>
+<summary><b>Reading this without London knowledge</b> — British property and transport terms, defined once</summary>
+
+The data is British, and the vocabulary is load-bearing rather than decorative: `tenure`,
+`borough` and `outcode` are model features, stamp duty is a cost line in the profit calculation
+below, and the difference between London's rail networks is why the station file gets filtered
+at all.
+
+| Term | What it means |
+|---|---|
+| **Borough** | One of London's 33 local-government districts, each holding roughly 150,000–400,000 people. The coarsest geography used here. |
+| **LSOA** | *Lower Layer Super Output Area*, the UK census's small-area unit: about 1,500 residents each. 4,835 cover London — roughly 147 per borough, which is the resolution argument in §8.2. |
+| **Postcode**, **outcode** | A UK postal code looks like `SW1A 1AA`. The **outcode** is its first half (`SW1A`), covering a few thousand addresses — finer than a borough, coarser than a street. |
+| **Freehold** vs **leasehold** (`tenure`) | Freehold: you own building and land outright. Leasehold: you own the right to occupy for a fixed term, often 99–999 years at the start, and value falls as that term runs down. Most London flats are leasehold — which is why "a short lease" appears below as a reason a property is genuinely cheap rather than mispriced. |
+| **Flat** | An apartment. |
+| **Terraced**, **semi-detached**, **detached** | A row house joined on both sides, a house joined on one side, a free-standing house. |
+| **Underground**, **Overground**, **DLR**, **Elizabeth Line**, **Tramlink** | London's rail networks: the subway; the suburban rail network; an automated light-rail line serving the eastern docklands; a fast east–west line opened in 2022; and street-running trams in one southern suburb. **TfL** (Transport for London) runs all of them. |
+| **Fare zone** | London transport is priced in concentric rings, Zone 1 at the centre out to Zone 6 — a serviceable shorthand for how central an address is. |
+| **Land Registry** | The government body recording every property sale in England and Wales; the price history derives from it. |
+| **Bank of England base rate** | The UK central bank's policy rate — what mortgages are priced off. |
+| **Met Police** | The Metropolitan Police, the force covering Greater London. The crime data is theirs. |
+| **Stamp duty** | A tax the **buyer** pays on a purchase, charged in bands, with an extra 3 % since 2016 on any property that is not your main home — a substantial cost for a flipper. |
+| **Units** | Prices in pounds sterling (£); floor areas in square metres (1 sqm ≈ 10.8 sq ft). |
+
+</details>
+
 ## Related work
 
 None of the ingredients here are new on their own — hedonic valuation, repeat-sales history, and
@@ -42,7 +68,7 @@ src/lff/                  the pipeline, one module per stage
   split.py                chronological split, encoding, variants     (§10)
   metrics.py              one metric implementation, one registry     (§11)
   models.py               trainers, deflators, mixture-of-experts     (§12)
-  analysis.py             diagnostics and design studies              (§12.2, §14)
+  analysis.py             diagnostics and design studies              (§12.1, §14)
   conformal.py            conformal bound and flip scanner            (§15)
   plots.py                every figure
   persist.py              run artifacts and self-checks               (§16-17)
@@ -160,9 +186,11 @@ leakage.
 **The station file is a problem the pipeline corrects, not ignores.** It is a February 2022
 network snapshot applied to 2008–2016 transactions. Used raw, 41 of its 471 stations are Elizabeth
 Line stops that did not open until May 2022 — crediting a 2009 sale with a rail link that arrived
-thirteen years later — and another 39 are Croydon Tramlink stops with no Underground service at
-all. Both are filtered out by positive selection on the Underground/Overground/DLR flags (which
-correctly keeps the 6 stations, like Paddington, that later gained Elizabeth Line service too).
+thirteen years later — and another 39 are Tramlink stops, street-running trams in one southern
+suburb with no Underground service at all. Both are filtered out by positive selection on the
+Underground/Overground/DLR flags, which correctly keeps the 6 stations that had been Underground
+stops for decades and merely *gained* Elizabeth Line service on top; Paddington, a major central
+interchange, is one of them.
 *Residual caveat:* some Overground/DLR extensions also post-date parts of the window; fixing that
 fully needs per-station opening dates, which this dataset does not carry.
 
@@ -208,7 +236,6 @@ Models are **selected on validation** and then scored **once** on the untouched 
 | Model | Trained on | Val MdAPE | Test MdAPE | Drift | Test MAE | Test R² |
 |---|---|---:|---:|---:|---:|---:|
 | **3-seed average detrended (XGB)** ← *selected on validation* | capped | **13.06 %** | **13.30 %** | +0.24 pp | £132,005 | 0.794 |
-| MoE — error routing detrended (XGB) | capped | 13.06 % | 13.34 % | +0.28 pp | £132,013 | 0.794 |
 | XGBoost detrended-market *(best single model)* | capped | 13.12 % | 13.48 % | +0.36 pp | £132,608 | 0.790 |
 | CatBoost detrended-market | cleaned | 13.40 % | 14.43 % | +1.03 pp | £137,437 | 0.776 |
 | MoE — luxury routing detrended (XGB) | capped | 13.54 % | 14.11 % | +0.57 pp | £139,260 | 0.786 |
@@ -216,8 +243,6 @@ Models are **selected on validation** and then scored **once** on the untouched 
 | CatBoost detrended-borough | cleaned | 14.09 % | 18.03 % | +3.94 pp | £147,661 | 0.777 |
 | CatBoost | cleaned | 14.79 % | 21.39 % | +6.60 pp | £162,248 | 0.747 |
 | 3-seed average (CatBoost) | cleaned | 14.97 % | 21.86 % | +6.89 pp | £162,481 | 0.755 |
-| MoE — error routing (CatBoost) | cleaned | 15.01 % | 21.90 % | +6.89 pp | £162,448 | 0.755 |
-| MoE — error routing (XGB) | cleaned | 15.12 % | 21.43 % | +6.31 pp | £172,939 | 0.690 |
 | 3-seed average (XGB) | cleaned | 15.12 % | 21.46 % | +6.34 pp | £172,972 | 0.690 |
 | XGBoost | raw | 15.30 % | 22.49 % | +7.19 pp | £173,485 | 0.689 |
 | XGBoost | capped | 15.45 % | 22.62 % | +7.17 pp | £173,433 | 0.720 |
@@ -225,15 +250,15 @@ Models are **selected on validation** and then scored **once** on the untouched 
 | XGBoost | cleaned | 15.55 % | 22.47 % | +6.92 pp | £178,700 | 0.674 |
 | Ridge (baseline) | capped | 17.43 % | 16.72 % | −0.71 pp | £168,702 | 0.280 |
 
-The top seven rows are new: four single detrended models (section 12.1, see *Why the trees
-couldn't beat Ridge — and the fix* below) plus three Mixture-of-Experts variants retrained on that
-same fixed target (section 14.4). Every row below Ridge is unchanged from before detrending existed:
-the plain trees and the plain-target MoE variants still show the same +6.4–7.2 pp drift they always
-did, which turns out to be diagnostic rather than incidental (see that section). The model at the
-top of this table is what the pipeline actually selects and deploys — chosen on validation MdAPE
-alone, as always. Its 0.07 pp test-set disadvantage against the single-model runner-up is real but
-small, and is reported rather than corrected for; see *Is the Mixture of Experts needed?* below for
-why the notebook does not simply swap in the model with the better test score.
+The top six rows are new: four single detrended models (section 12.1, see *Why the trees
+couldn't beat Ridge — and the fix* below) plus two Mixture-of-Experts variants retrained on that
+same fixed target. Every row below Ridge is unchanged from before detrending existed: the plain
+trees and the plain-target MoE variants still show the same +6.4–7.2 pp drift they always did,
+which turns out to be diagnostic rather than incidental. The model at the top of this table is
+what the pipeline actually selects and deploys — chosen on validation MdAPE alone, as always. Its
+0.07 pp test-set disadvantage against the single-model runner-up is real but small, and is reported
+rather than corrected for: overriding the selection with a test-set result would defeat the point
+of holding test out in the first place.
 
 **Conformal bound.** Calibrated on a dedicated calibration split at α = 0.10 (never touched by
 early stopping or model selection), the safety multiplier is **q₁₀ = 0.7484** — the floor sits at
@@ -279,20 +304,17 @@ All six variants share that bias identically and the gate consumes only the delt
 
 ### Why the trees couldn't beat Ridge — and the fix
 
-An earlier iteration of this project found Ridge beating every tree model on test MdAPE by 5.3
-percentage points, and attributed it to the four-way split moving the validation window away from
-test (documented below, in *Why calibration gets its own split*). That explanation was plausible
-given the evidence available at the time, but a more direct test shows it was not the primary
-cause.
+Plain XGBoost and CatBoost lose to the Ridge baseline by five points of MdAPE or more — on
+tabular data of exactly the shape gradient boosting should win on. That is a symptom, not a
+verdict on the architecture.
 
 **The real cause: a tree's prediction is a leaf constant, so it cannot extrapolate a rising
-market.** Once a test-time value of a trending feature (`days_since_start`,
-`market_median_rolling_3m`) exceeds anything seen in training, every such row falls into the same
-boundary leaf and the model flat-lines at the last price level it learned. Ridge multiplies by a
-coefficient instead of splitting, so it at least projects the trend forward — that asymmetry is
-what was producing the gap. It is not a guess. Measured on the **validation** set (section 12.2,
-added so the diagnosis does not depend on held-out data), plain XGBoost under-predicts by a mean
-residual of **+£78,782** against Ridge's **+£52,225** — a one-directional level error, not noise.
+market.** Once a value of a trending feature (`days_since_start`, `market_median_rolling_3m`)
+exceeds anything seen in training, every such row falls into the same boundary leaf and the model
+flat-lines at the last price level it learned. Ridge multiplies by a coefficient instead of
+splitting, so it at least projects the trend forward — that asymmetry is what produces the gap.
+Measured on the **validation** set (section 12.1), plain XGBoost under-predicts by a mean residual
+of **+£78,782** against Ridge's **+£52,225** — a one-directional level error, not noise.
 
 Note what that Ridge figure implies, because it sharpens the claim: Ridge is *also* biased by the
 same mechanism, just less. The market rose faster than any linear projection of the training
@@ -313,11 +335,10 @@ instead of the unset default of squared error on `log(price)`.
 
 The result: validation mean-residual bias fell from **+£78,782 to +£20,873** — less than half
 Ridge's — and test-set drift for XGBoost collapsed from **+7.17 pp to +0.36 pp**, using the
-*identical* four-way split as before. That last point is what overturns the
-original explanation: if the split geometry were the primary cause, detrending (which changes
-nothing about which rows are in which split) should not have fixed it. The split-ordering cost
-documented below is real, but it was a secondary effect riding on top of the much larger
-extrapolation problem, not the main story.
+*identical* four-way split as before. That last point is the clean argument that split geometry
+is not the primary cause: detrending changes nothing about which rows are in which split, yet it
+closes almost all of the gap. The split-ordering cost documented below is real, but it is a
+secondary effect riding on top of the much larger extrapolation problem, not the main story.
 
 ### Which deflator? A three-way comparison, not an assumption
 
@@ -352,36 +373,6 @@ only what the model architecture cannot learn on its own (the market-wide time t
 the model can already learn from a feature should stay a feature, not get folded into the label.
 **Market-wide is the deflator used by `XGBoost detrended-market (capped)`** — the best-scoring
 single model, and the runner-up to the model section 14 actually selects (see below).
-
-### Is the Mixture of Experts needed?
-
-Section 12 built two MoE designs — luxury routing and error-driven routing — and a 3-seed-average
-control, all originally trained on plain `log(price)`, the same target that made the single trees
-lose to Ridge. Once section 12.1 fixed that target, the fair question became: does wrapping the
-*fixed* model in an MoE add anything, or was the earlier "MoE roughly ties its own average"
-finding just an artifact of a broken target? Section 14.4 retrains all three on the winning
-detrended recipe and checks each against the single best model:
-
-| Variant | Test MdAPE | Test MAE | Test R² | Δ vs. single model |
-|---|---:|---:|---:|---:|
-| 3-seed average, detrended (XGB) | **13.30 %** | £132,005 | 0.794 | −0.18 pp |
-| MoE — error routing, detrended (XGB) | 13.34 % | £132,013 | 0.794 | −0.14 pp |
-| Single model (`XGBoost detrended-market`, capped) | 13.48 % | £132,608 | 0.790 | — |
-| MoE — luxury routing, detrended (XGB) | 14.11 % | £139,260 | 0.786 | +0.64 pp |
-
-**Averaging helps; routing does not.** A plain 3-seed average beats the best single model by
-0.18 pp, and error-driven routing by 0.14 pp — but the router does not beat its own averaging
-control (**−0.005 pp on validation**, the comparison the verdict is drawn from). In other words the
-entire gain comes from averaging three seeds, which costs nothing conceptually, and none of it from
-the learned routing that was the architecturally interesting part. Luxury routing is worse than
-every alternative, by 0.64 pp: splitting the market into "standard" and "luxury" and training a
-specialist for each loses more from halving each expert's data than it gains from specialisation.
-
-The 3-seed average is also what section 14 **selects**, on validation, so this is one of the rare
-cases where the interesting result and the deployed model coincide. That is not by construction —
-selection reads validation only, and the routing verdict above is likewise computed on validation
-precisely so that a conclusion about architecture never depends on the held-out set. The test
-column is reported for disclosure.
 
 ### Repeat-property diagnostic
 
@@ -455,7 +446,7 @@ which materially changed the reported results.
 
 | # | Defect | Consequence | Fix |
 |---|---|---|---|
-| 1 | `pd.to_numeric(category_of_strings, errors='coerce')` on `propertyType`, `tenure`, `borough`, `outcode` | Those four columns became **entirely NaN**; every CatBoost model and every MoE router trained on four dead features | CatBoost uses native `cat_features`; routers use train-fitted target encoding |
+| 1 | `pd.to_numeric(category_of_strings, errors='coerce')` on `propertyType`, `tenure`, `borough`, `outcode` | Those four columns became **entirely NaN**; every CatBoost model and the MoE router trained on four dead features | CatBoost uses native `cat_features`; the router uses train-fitted target encoding |
 | 2 | The conformal cell called `expert_0`/`router_clf` directly, but a later cell had rebound them to a different backend trained on a different feature space | The "90 % guarantee" was computed from a model nobody intended to deploy, on mismatched features | Uniform `ModelBundle.predict()`; calibration and scoring share one code path |
 | 3 | `IsolationForest` fitted on all data, anomalies dropped from validation and test too | Hard cases deleted from the exam — scores inflated | Fitted on the training slice, filters training only |
 | 4 | Every reported metric came from the validation set | Model selection and reporting on the same data — circular | Select on validation, score once on the untouched test set |
@@ -468,10 +459,10 @@ which materially changed the reported results.
 
 Two additions worth calling out:
 
-* **A 3-seed average control.** The error-driven MoE trains three experts differing only by random
-  seed, then routes between them. Averaging those same three experts costs nothing and is what the
-  routing must beat to justify itself. Without that control, an MoE that beats a single model has
-  proved only that ensembling works.
+* **A 3-seed average baseline.** Fitting the same recipe three times, differing only by random
+  seed, and averaging the predictions costs nothing conceptually — it is the plain-ensembling
+  comparison point an MoE design has to beat. Without it, an MoE that beats a single model has
+  proved only that ensembling works, not that its architecture does.
 * **A repeat-property diagnostic.** The source is a price *history*, so a dwelling sold twice
   appears on both sides of a time-based split. Section 14.1 reports test accuracy separately for
   properties seen and unseen during training.
@@ -486,7 +477,7 @@ results again:
 
 | # | Issue | Fix |
 |---|---|---|
-| 1 | The station file is a Feb 2022 snapshot; 41 Elizabeth Line stations (opened May 2022) and 39 Croydon Tramlink stops (no Underground service) fed the one distance feature used for every 2008–2016 transaction | Positive selection on Underground/Overground/DLR flags; split into `distance_to_underground_m` and `distance_to_transit_m` |
+| 1 | The station file is a Feb 2022 snapshot; 41 Elizabeth Line stations (that line opened May 2022) and 39 Tramlink stops (suburban street trams, no Underground service) fed the one distance feature used for every 2008–2016 transaction | Positive selection on Underground/Overground/DLR flags; split into `distance_to_underground_m` and `distance_to_transit_m` |
 | 2 | `Zone`, present for all 471 stations, had zero references in the pipeline | Nearest station's fare zone attached as `station_zone`, free from the existing `cKDTree` query |
 | 3 | The conformal calibration set was the same validation set used for early stopping and model selection — calibrating on data the model was implicitly tuned against | New dedicated calibration split (60/15/10/15 train/val/calib/test); §17 gained an ordering assertion |
 | 4 | `bathrooms` was loaded and only plotted; `currentEnergyRating` was not even loaded; `crime_volume` was engineered, merged, and never added to `FEATURES` | All four wired into the feature list |
@@ -523,15 +514,21 @@ artifacts/                 model, manifest, leaderboard, cache (gitignored)
   `history_price` — what a property *actually sold for*. A transaction that sold below its floor
   in 2016 validates the valuation model; it is not a listing anyone can act on today. A live
   scanner needs an asking-price feed and a calibration step for the asking→sold gap, which this
-  dataset does not contain.
-* **A flip flag is a statistical claim, not a financial one.** It says nothing about stamp duty,
+  dataset does not contain. `scripts/live_flip_scan/` is a first, deliberately uncalibrated
+  attempt — see [Checking against real listings](#checking-against-real-listings) below.
+* **A flip flag is a statistical claim, not a financial one.** It says nothing about stamp duty
+  (the UK's banded purchase tax, paid by the buyer),
   refurbishment, holding costs, or *why* the property is cheap — and properties are usually cheap
-  for a reason the data does not record (short lease, structural problems, a motivated seller).
+  for a reason the data does not record — few years left on the lease, structural problems, a
+  seller who needs out quickly.
 * **Conformal coverage is marginal, not conditional** — ~90 % overall, not guaranteed within any
   given borough or price decile.
 * **The 2008–2016 window ends a decade ago**, and the corrected §14.5 ablation shows crime is
   worth only +0.01 pp — so the window *can* be widened by dropping crime, and probably should be.
-  Brexit, the 2016 stamp duty surcharge, the pandemic and the 2022 rate cycle all fall outside the
+  the 2016 Brexit referendum (which hit London prices hardest in the UK), the 3 % stamp-duty
+  surcharge on additional properties introduced the same year and aimed squarely at flipping, the
+  pandemic, and the 2022 rate cycle that took the base rate from near zero to over 5 % all fall
+  outside the
   current window regardless.
 * **Gain-based importance is not causal**, and this feature set is heavily collinear — latitude,
   longitude, borough, outcode and distance-to-centre all encode "where".
@@ -541,6 +538,35 @@ artifacts/                 model, manifest, leaderboard, cache (gitignored)
 * **The borough-scaled deflator was a reasonable idea that measurably did not work** (section
   14.3) — worth knowing before reaching for finer-grained detrending elsewhere in this pipeline
   (e.g. per-property-type) without testing it the same way.
+
+## Checking against real listings
+
+`scripts/live_flip_scan/` scrapes current Rightmove listings (robots.txt checked at runtime,
+rate-limited, every response cached), substitutes five public data sources for the features that
+only exist inside this project's own 2008–2016 corpus, retrains the selected model in-process, and
+scores the live listings through the same conformal scanner as section 15:
+
+| Live-data proxy | Real feature it stands in for |
+|---|---|
+| UK HPI (`landregistry.data.gov.uk`) | `market_median_rolling_3m/12m`, `lagged_borough_median_sqm` |
+| `data.police.uk` | `crime_volume`, `crime_volume_prev_12m` (point-radius, not borough-sum; the 12-month figure is the latest month annualised, not a real trailing sum) |
+| EPC register | `floorAreaSqM`, `currentEnergyRating` fallback |
+| HM Land Registry Price Paid Data | `prev_sale_price` and the rest of the prior-sale block, matched on postcode + street |
+| `lff.spatial`, reused directly | borough, distance to nearest station/centre |
+
+```bash
+python scripts/run_live_flip_scan.py --stage all
+```
+
+**Result, 200 current London listings (2026-08-23).** 13.39 % of the held-out test set (completed
+sales) was flagged as a flip candidate, against 29.00 % of the live listings (asking prices) —
+the opposite direction the asking-vs-sold gap alone would predict, since an asking price sitting
+above the eventual sold price should make *fewer* listings look underpriced, not more. Splitting
+the predicted/asking ratio by borough points at why this is probably not a real signal: a handful
+of boroughs (Camden, Kensington & Chelsea) show predictions 1.7–2.5× the asking price, more
+consistent with an artifact of the UK HPI market-level proxy or the 10–18 year extrapolation on
+`days_since_start` than genuine mispricing. Treat 29.00 % as inconclusive, not as a finding about
+the 2026 market — the script prints the full proxy-vs-real breakdown with every run.
 
 ## Where to take it next
 
@@ -560,7 +586,8 @@ artifacts/                 model, manifest, leaderboard, cache (gitignored)
 4. **Walk-forward backtesting** — rolling-origin evaluation gives a distribution of MdAPE instead
    of a single number with no error bar, and would settle whether the detrended models' lead over
    Ridge is stable across market regimes or specific to this test window.
-5. **Turn the margin into a P&L** — stamp duty bands (including the 3 % surcharge), refurbishment,
+5. **Turn the margin into a P&L** — stamp duty bands (including the 3 % additional-property
+   surcharge, which applies to exactly this kind of purchase), refurbishment,
    financing, agent and legal fees; then rank candidates by return rather than by pounds.
 6. **Conditional (Mondrian) conformal prediction** — per-borough and per-decile multipliers so
    coverage holds within the segments an investor actually shops in.

@@ -37,3 +37,7 @@ nbconvert==7.17.1        # enables the headless `--execute` end-to-end test
 
 # --- utilities -------------------------------------------------------------
 requests==2.32.5         # downloads the dataset release asset
+
+# --- live-scan (optional, one-off: scripts/live_flip_scan/) ----------------
+beautifulsoup4==4.15.0
+lxml==5.3.0

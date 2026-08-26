@@ -98,7 +98,6 @@ def check_moe_necessity(registry: ResultsRegistry, single_model: str) -> pd.Data
     names = {
         "Single model": single_model,
         "MoE - luxury routing detrended (XGB)": "MoE - luxury routing detrended (XGB)",
-        "MoE - error routing detrended (XGB)": "MoE - error routing detrended (XGB)",
         "3-seed average detrended (XGB)": "3-seed average detrended (XGB)",
     }
     rows = []

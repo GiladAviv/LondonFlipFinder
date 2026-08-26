@@ -6,11 +6,10 @@ two or more of them. The pipeline treats every row as an independent transaction
 of that structure, even though 61.1% of in-window sales have an earlier sale of the same
 property somewhere in the file.
 
-The omission is expensive. Predicting a sale as nothing more than its own previous price scaled
-by a crude market index -- no model, no features, one line of arithmetic -- lands at 15.64%
-MdAPE against the full seventeen-model pipeline's 13.30%. Prior price is the strongest signal
-in the dataset and it is also the one a flipper actually reasons with: what did this cost last
-time, and what has the market done since.
+The omission is expensive. Prior price is the strongest single signal in the dataset -- it
+correlates with log price at 0.77, ahead of floor area -- and it is also the one a flipper
+actually reasons with: what did this cost last time, and what has the market done since.
+Section 14.6 measures what the block is worth, on the same gate as every other feature group.
 
 The features are causally clean by construction -- they read only sales strictly before the row
 being predicted -- but "strictly before" is doing real work here, and three things could break

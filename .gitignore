@@ -21,3 +21,11 @@ __pycache__/
 
 # CatBoost training logs, written to cwd by default
 catboost_info/
+
+# Raw HTTP responses cached by the one-off live-listing scan script -- may contain scraped
+# third-party content and should not be committed.
+scripts/live_flip_scan/cache/
+
+# Full HTML export of the notebook, outputs included -- outputs are kept out of git via
+# nbstripout (see above), so a baked-in export shouldn't be committed either.
+london-flip-finder.html
