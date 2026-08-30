@@ -80,6 +80,7 @@ footer a{color:var(--accent);}
 <p class="kicker">London Flip Finder &middot; Applied Data Science, Bar-Ilan University</p>
 <h1>Your gradient boosting isn't broken — your target is</h1>
 <p class="dek">A linear baseline beat XGBoost and CatBoost on 60,000 London property sales. The fix wasn't a better model.</p>
+<p class="byline">By Gilad Aviv</p>
 <hr class="rule">
 <p>Halfway through building a valuation model for London property, I hit a result that should not happen.</p>
 <p>On tabular data — 60,000 rows, 28 features, a mix of numeric and categorical — gradient-boosted trees are supposed to win. That is the whole reason they are the default. Instead, on the held-out test set, my plain XGBoost and CatBoost models scored <strong>19.57 % to 20.25 %</strong> median absolute percentage error, while a Ridge regression with <code>alpha=1.0</code> and no tuning at all scored <strong>16.62 %</strong>.</p>
