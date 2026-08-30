@@ -11,6 +11,10 @@ of safety rather than a hunch.
 The pipeline lives in [`src/lff/`](src/lff/); [`london_flip_finder.ipynb`](london_flip_finder.ipynb)
 is the narrative layer that drives it and carries the analysis.
 
+A closer look at the central finding — why gradient-boosted trees lost to a linear
+baseline, and what fixed it — is written up on Medium:
+[*I Beat XGBoost With Linear Regression (By Accident)*](https://medium.com/@giladaviv987/i-beat-xgboost-with-linear-regression-by-accident-37fed729835e).
+
 **What the finished pipeline found**, over 59,946 in-window transactions scored on a held-out test
 split that nothing before §14 reads:
 
