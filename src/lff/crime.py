@@ -2,7 +2,7 @@
 
 `build_crime_features` in clean.py sums the raw file to borough-months: 33 areas. The file
 carries `lsoa_code` -- 4,835 areas, a 147x finer geography that the aggregation throws away.
-Section 14.5 measured borough crime at +0.01 pp of validation MdAPE and concluded crime does
+Section 14.5 measured borough crime at +0.11 pp of validation MdAPE and concluded crime does
 not earn the 2008-2016 window it forces. That conclusion is only sound if crime was given a
 fair test, and three things about the borough version make it not one:
 

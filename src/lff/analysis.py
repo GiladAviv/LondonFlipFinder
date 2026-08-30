@@ -1,4 +1,6 @@
-"""Diagnostics and design studies. Sections 12.2, 14.1, 14.3-14.5, and the crime study (8.2)."""
+"""Diagnostics and design studies. Sections 12.1, 14.1, 14.3, 14.5-14.6, and the crime
+study (8.2). Section 14 skips 14.2 and 14.4; both were removed and the rest were not
+renumbered, so cross-references elsewhere keep pointing at the same sections."""
 from __future__ import annotations
 
 import numpy as np
@@ -92,28 +94,6 @@ def summarise_target_transform(registry: ResultsRegistry) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def check_moe_necessity(registry: ResultsRegistry, single_model: str) -> pd.DataFrame:
-    """Compare each detrended MoE variant against the single detrended model it is built from."""
-    board = registry.frame("test")
-    names = {
-        "Single model": single_model,
-        "MoE - luxury routing detrended (XGB)": "MoE - luxury routing detrended (XGB)",
-        "3-seed average detrended (XGB)": "3-seed average detrended (XGB)",
-    }
-    rows = []
-    for label, model_name in names.items():
-        match = board[board["Model"] == model_name]
-        if match.empty:
-            continue
-        row = match.iloc[0]
-        rows.append({"Variant": label, "Test MdAPE": row["MdAPE"], "Test MAE": row["MAE"],
-                    "Test R2": row["R2"]})
-    frame = pd.DataFrame(rows)
-    baseline = frame.loc[frame["Variant"] == "Single model", "Test MdAPE"].iloc[0]
-    frame["MdAPE delta vs. single model"] = frame["Test MdAPE"] - baseline
-    return frame
-
-
 def ablation_study(splits: Splits, variants: dict[str, pd.DataFrame],
                    groups: dict[str, list[str]], cfg: Config,
                    val_eval: pd.DataFrame) -> pd.DataFrame:
@@ -164,7 +144,7 @@ def ablation_study(splits: Splits, variants: dict[str, pd.DataFrame],
 def crime_resolution_study(splits: Splits, variants: dict[str, pd.DataFrame], cfg: Config,
                            val_eval: pd.DataFrame,
                            seeds: tuple[int, ...] = (42,)) -> pd.DataFrame:
-    """Is the +0.01 pp verdict on crime a verdict on crime, or only on borough-grain crime?
+    """Is the +0.11 pp verdict on crime a verdict on crime, or only on borough-grain crime?
 
     Same recipe, same rows, same target as `ablation_study` -- the only thing that varies is
     which crime columns are in the feature matrix. Every variant is scored on validation,
@@ -179,15 +159,20 @@ def crime_resolution_study(splits: Splits, variants: dict[str, pd.DataFrame], cf
         raise KeyError(
             "No LSOA crime columns in the model frame. Pass lsoa_crime to build_master_table."
         )
-    by_category = [c for c in lsoa_available if c.startswith("lsoa_crime_")
-                   and not c.startswith("lsoa_crime_density")]
+    # Every count series at LSOA grain: the all-crime total plus its three category splits.
+    # The density column is the one normalised series and is held back for its own design.
+    counts = [c for c in lsoa_available if not c.startswith("lsoa_crime_density")]
+    # Named columns are filtered through `lsoa_available` too, so a change to
+    # LSOA_CRIME_FEATURES drops a design rather than raising a KeyError deep in the fit.
+    total = [c for c in lsoa_available if c == "lsoa_crime_prev_12m"]
+    density = [c for c in lsoa_available if c.startswith("lsoa_crime_density")]
 
     designs = {
         "No crime": [],
         "Borough count (status quo)": BOROUGH_CRIME_FEATURES,
-        "LSOA total": ["lsoa_crime_prev_12m"],
-        "LSOA by category": by_category,
-        "LSOA + density": [*by_category, "lsoa_crime_density_prev_12m"],
+        "LSOA total": total,
+        "LSOA by category": counts,
+        "LSOA + density": [*counts, *density],
         "Borough + LSOA": [*BOROUGH_CRIME_FEATURES, *lsoa_available],
     }
 
@@ -281,5 +266,10 @@ def prior_sale_study(splits: Splits, variants: dict[str, pd.DataFrame], cfg: Con
             "prev_sale_days_since_start") if c in available],
         "Full prior-sale group": available,
     }
-    return _seeded_design_study(splits, variants, cfg, val_eval, FEATURES, designs, seeds,
+    # FEATURES now carries PRIOR_SALE_ADOPTED, so the base has to have the whole candidate set
+    # stripped out of it -- exactly as the crime study strips its own varying columns. Leaving
+    # them in would both duplicate columns in the feature matrix and hand the "No prior sale"
+    # baseline the very features it is meant to be measured against.
+    base = [f for f in FEATURES if f not in PRIOR_SALE_FEATURES]
+    return _seeded_design_study(splits, variants, cfg, val_eval, base, designs, seeds,
                                 baseline="No prior sale", label="Prior-sale features")

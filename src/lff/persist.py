@@ -141,7 +141,10 @@ def run_self_checks(splits: Splits, cfg: Config, bundle: ModelBundle,
     # "past" holds. A single row whose matched sale is dated on or after its own sale date
     # would be reading the target, so this is asserted rather than reported.
     if "prev_sale_date" in splits.train.columns:
-        matched = master[master.get("has_prev_sale", 0) == 1]
+        # Read the split frames, not `master`: prior-sale features are attached downstream of
+        # df_master, so the columns exist only on the modelling frame the splits were cut from.
+        modelled = pd.concat([splits.train, splits.val, splits.calib, splits.test])
+        matched = modelled[modelled["has_prev_sale"] == 1]
         offending = int((matched["prev_sale_date"] >= matched["date"]).sum())
         check("prior sales strictly precede the row that reads them", offending == 0,
               f"{len(matched):,} rows carry a prior sale, {offending} dated at or after their own")

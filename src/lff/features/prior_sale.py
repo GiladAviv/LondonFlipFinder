@@ -1,10 +1,10 @@
 """A property's own transaction history.
 
 The source file is a price *history*: 418,201 rows covering 137,760 unique addresses. Once the
-exact duplicates are removed 314,895 distinct sales remain, and 66.0% of addresses still record
-two or more of them. The pipeline treats every row as an independent transaction and uses none
-of that structure, even though 61.1% of in-window sales have an earlier sale of the same
-property somewhere in the file.
+exact duplicates are removed (315,674 remain) and the same-day conflicts collapsed, 314,895
+distinct sales are left, and 66.0% of addresses still record two or more of them. The pipeline
+treats every row as an independent transaction and uses none of that structure, even though
+61.1% of in-window sales have an earlier sale of the same property somewhere in the file.
 
 The omission is expensive. Prior price is the strongest single signal in the dataset -- it
 correlates with log price at 0.77, ahead of floor area -- and it is also the one a flipper
@@ -18,7 +18,7 @@ it, so each is handled explicitly:
 * **Duplicates.** 102,527 rows of the raw file (24.5%) are exact (address, date, price)
   repeats. Left in, a property appears to sell several times on one day and an as-of merge can
   return the row it is supposed to be predicting.
-* **Same-day records.** A further ~800 address-date pairs carry conflicting prices. These are
+* **Same-day records.** A further 779 address-date pairs carry conflicting prices. These are
   collapsed to their median before anything else looks at them.
 * **The window.** History is read from the *whole* file, 1995-2024, not from the modelling
   window. A 2009 sale's previous sale is often in 2003, and clipping the history to 2008-2016
