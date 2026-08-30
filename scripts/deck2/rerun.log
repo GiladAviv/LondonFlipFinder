@@ -1,0 +1,233 @@
+=== lff 3.0.0 | xgboost 2.1.4 ===
+split 60%/15%/10%/15%  cap £4,000,000  alpha 0.1
+All 5 required inputs present in /home/dsi/giladaviv/london_flip_finder/data/data_for_ds_project
+Loaded 4 sources in 7.5s
+   houses          418,201 rows x 14 cols  (   225 MB)
+   crime        13,490,604 rows x  4 cols  (   108 MB)
+   boe                 246 rows x  2 cols  (     0 MB)
+   stations            471 rows x 14 cols  (     0 MB)
+LSOA boundaries (cached): 5,901 areas
+Houses: 82,122 rows in 2008-2016 -> 79,815 with size data
+Crime: 3,564 borough-months, 33 boroughs
+Rates: 3,288 days, 0.25% - 5.50%
+LSOA crime: 522,180 LSOA-months, 4,835 LSOAs, 4 category groups
+   median crime per LSOA-month: 9 total, 1 burglary -- sparse, which is why the 12-month window leads
+Stations: 270 Underground, 399 heavy rail (72 Elizabeth-only/tram stops excluded as post-window or non-rail)
+Loaded cached master table: (59946, 37)
+df_master (59946, 37)  [53s]
+
+=== EDA figures ===
+    saved figures/c18_price_clip.png  [13.  5.]
+    saved figures/c20_property_chars.png  [16. 12.]
+    saved figures/c23a_tube_premium.png  [13.   5.5]
+    saved figures/c23b_crime_and_market_0.png  [13.  5.]
+    saved figures/c23b_crime_and_market_1.png  [13.  8.]
+    saved figures/c23c_price_vs_area.png  [11.  7.]
+    saved figures/c23d_borough_sqm.png  [11. 10.]
+LSOA price summary: 2,562 of 2,863 LSOAs with >= 5 sales
+Both maps run darkest in the centre. That is the confound the next figure removes: central London is simultaneously the most expensive and the most crime-recording part of the city, so a raw crime-price correlation largely measures centrality.
+    saved figures/c26_lsoa_maps.png  [16.  8.]
+Across boroughs r = +0.30; within borough r = +0.00.
+    saved figures/c28_within_borough.png  [15.  6.]
+Correlation between crime change and price growth: r = -0.01 over 863 LSOAs.
+    saved figures/c29_crime_change.png  [11.  7.]
+EDA done [65s]
+Sale history: 418,201 rows -> 315,674 after exact duplicates (102,527 removed, 24.5%)
+   779 same-day price conflicts collapsed to their median
+   314,895 sales across 137,760 addresses; 66.0% of addresses sold more than once (1995 to 2024)
+Prior-sale features: 36,609 of 59,946 rows (61.1%) have an earlier sale of the same property
+   years since that sale: median 6.9 (p10 2.2, p90 13.8)
+Modelling table: (59946, 52)
+train  35,967 rows   2008-01-01 -> 2014-04-17
+val     8,991 rows   2014-04-17 -> 2015-04-30
+calib   5,994 rows   2015-04-30 -> 2015-12-17
+test    8,994 rows   2015-12-17 -> 2016-12-31
+eval universe: 8,840 val, 5,916 calib, 8,859 test
+raw       35,967 training rows
+capped    35,693 training rows
+cleaned   35,075 training rows
+
+IsolationForest scored 30,853 of 35,693 capped training rows (4,840 skipped for missing values, kept as-is) and flagged 618 anomalies (2% target rate); validation and test are untouched.
+
+=== training [76s] ===
+--- Baseline ---
+Ridge (baseline)                  val   MdAPE  17.09%   MAE £   163,715   R2  0.539
+
+--- Single gradient-boosted models ---
+XGBoost (raw)                     val   MdAPE  13.88%   MAE £   126,418   R2  0.787
+XGBoost (capped)                  val   MdAPE  14.33%   MAE £   126,492   R2  0.813
+XGBoost (cleaned)                 val   MdAPE  14.60%   MAE £   137,929   R2  0.750
+CatBoost (cleaned)                val   MdAPE  13.20%   MAE £   123,849   R2  0.800
+
+--- Detrended gradient-boosted models (section 12.1) ---
+XGBoost detrended-market (capped) val   MdAPE  12.19%   MAE £   114,186   R2  0.834
+CatBoost detrended-market (cleaned)val   MdAPE  11.94%   MAE £   115,177   R2  0.824
+XGBoost detrended-borough (capped)val   MdAPE  12.98%   MAE £   118,293   R2  0.830
+CatBoost detrended-borough (cleaned)val   MdAPE  12.63%   MAE £   118,386   R2  0.819
+
+--- Mixture of Experts ---
+   luxury router: temperature 0.835, 3,001 luxury / 32,074 standard training rows
+MoE - luxury routing (XGB)        val   MdAPE  14.05%   MAE £   137,102   R2  0.751
+3-seed average (XGB)              val   MdAPE  14.23%   MAE £   134,327   R2  0.763
+3-seed average (CatBoost)         val   MdAPE  13.26%   MAE £   122,881   R2  0.807
+
+--- Mixture of Experts on the best recipe (detrended, section 12.1) ---
+   luxury router: temperature 0.763, 3,541 luxury / 32,152 standard training rows
+MoE - luxury routing detrended (XGB)val   MdAPE  12.49%   MAE £   120,442   R2  0.817
+3-seed average detrended (XGB)    val   MdAPE  12.12%   MAE £   114,888   R2  0.834
+
+Trained 14 models in 182s
+                            Model  Mean residual (val)  Median residual  Under-predicted %
+                 XGBoost (capped)         74678.976127     38198.359375          70.350679
+XGBoost detrended-market (capped)         24330.695279      8625.825509          54.796380
+                 Ridge (baseline)         51753.866443     36073.016178          65.554299
+    saved figures/c48_leaderboard.png  [16.  6.]
+
+Selected on validation MdAPE: CatBoost detrended-market (cleaned)
+Ridge (baseline)                  test  MdAPE  16.62%   MAE £   247,612   R2 -180.118
+XGBoost (raw)                     test  MdAPE  19.57%   MAE £   154,835   R2  0.752
+XGBoost (capped)                  test  MdAPE  19.92%   MAE £   157,856   R2  0.750
+XGBoost (cleaned)                 test  MdAPE  20.25%   MAE £   165,254   R2  0.704
+CatBoost (cleaned)                test  MdAPE  18.03%   MAE £   142,472   R2  0.792
+XGBoost detrended-market (capped) test  MdAPE  13.88%   MAE £   133,597   R2  0.794
+CatBoost detrended-market (cleaned)test  MdAPE  13.88%   MAE £   133,012   R2  0.794
+XGBoost detrended-borough (capped)test  MdAPE  14.32%   MAE £   128,271   R2  0.813
+CatBoost detrended-borough (cleaned)test  MdAPE  16.00%   MAE £   133,806   R2  0.803
+MoE - luxury routing (XGB)        test  MdAPE  18.99%   MAE £   159,358   R2  0.724
+3-seed average (XGB)              test  MdAPE  19.75%   MAE £   162,207   R2  0.706
+3-seed average (CatBoost)         test  MdAPE  18.47%   MAE £   142,693   R2  0.796
+MoE - luxury routing detrended (XGB)test  MdAPE  14.31%   MAE £   135,590   R2  0.798
+3-seed average detrended (XGB)    test  MdAPE  13.62%   MAE £   131,587   R2  0.803
+                               Model  MdAPE (val)     MAE (val)  MdAPE (test)    MAE (test)  MdAPE drift
+      3-seed average detrended (XGB)    12.122027 114887.713559     13.624444 131587.178938     1.502417
+   XGBoost detrended-market (capped)    12.192072 114186.159123     13.876396 133597.196560     1.684325
+ CatBoost detrended-market (cleaned)    11.938959 115176.832014     13.876575 133011.586921     1.937616
+MoE - luxury routing detrended (XGB)    12.487508 120442.129219     14.312796 135590.456882     1.825288
+  XGBoost detrended-borough (capped)    12.977351 118292.586606     14.319936 128270.769930     1.342585
+CatBoost detrended-borough (cleaned)    12.630900 118385.834734     16.000268 133805.547538     3.369368
+                    Ridge (baseline)    17.092624 163714.920444     16.624010 247612.494968    -0.468615
+                  CatBoost (cleaned)    13.197561 123849.125804     18.030934 142471.785337     4.833373
+           3-seed average (CatBoost)    13.256281 122881.383319     18.469032 142693.065855     5.212751
+          MoE - luxury routing (XGB)    14.052482 137102.369877     18.989369 159358.063722     4.936887
+                       XGBoost (raw)    13.879809 126418.377583     19.567558 154835.481183     5.687749
+                3-seed average (XGB)    14.229350 134327.466351     19.746571 162207.348181     5.517221
+                    XGBoost (capped)    14.328340 126492.441275     19.916926 157855.929377     5.588586
+                   XGBoost (cleaned)    14.595179 137929.312942     20.252555 165254.205505     5.657375
+23.8% of test transactions are properties that also appear in training (2,112 of 8,859).
+MdAPE gap between seen and unseen properties: -1.54 percentage points.
+     Test subset  Rows     MdAPE           MAE       R2  within_25pct
+Seen in training  2112 12.754432 118212.227592 0.808047     79.971591
+ Unseen property  6747 14.298607 137644.200958 0.790560     75.485401
+ Backend Target transform  Validation MdAPE  Test MdAPE      Test MAE
+ XGBoost          regular         14.328340   19.916926 157855.929377
+ XGBoost      market-wide         12.192072   13.876396 133597.196560
+ XGBoost   borough-scaled         12.977351   14.319936 128270.769930
+CatBoost          regular         13.197561   18.030934 142471.785337
+CatBoost      market-wide         11.938959   13.876575 133011.586921
+CatBoost   borough-scaled         12.630900   16.000268 133805.547538
+
+=== SECTION 15 conformal [261s] ===
+Calibrated on 5,916 properties
+Safety multiplier q_10 = 0.7674
+Interpretation: floor = prediction x 76.74%, expected to hold for 90% of properties
+Q_SAFETY           : 0.767365
+Target confidence  : 90.00%
+Actual coverage    : 86.61%   (-3.39 pp)
+Properties scanned : 8,859
+Flip candidates    : 1,186 (13.39%)
+Median margin      : £66,124
+    saved figures/c73_flip_margins.png  [16.  6.]
+   leaderboard.csv             0.00 MB
+   live_scan                   0.00 MB
+   manifest.json               0.01 MB
+   master_table.key.json       0.00 MB
+   master_table.parquet        5.97 MB
+   model.joblib                3.55 MB
+[PASS] chronological split integrity -- train ends 2014-04-17, test starts 2015-12-17
+[PASS] calibration split sits strictly between validation and test -- calib spans 2015-04-30 to 2015-12-17, untouched by model fitting or selection
+[PASS] no all-NaN feature columns -- 28 features carry signal
+[PASS] categorical levels pinned from training -- validation categories use the training level set
+[PASS] lagged market features exclude the present -- 3/3 lag features unmoved by a 10x shock to their own month
+[PASS] conformal coverage within tolerance (calibration holdout) -- 88.39% against a 90% target, on 1,775 rows the multiplier was not fitted on
+[INFO] test-set conformal coverage 86.61% against a 90% target -- reported, not asserted
+[PASS] raw station table intact -- 471 stations still loaded
+[PASS] prior sales strictly precede the row that reads them -- 36,609 rows carry a prior sale, 0 dated at or after their own
+[PASS] no target leakage in feature list -- no third-party valuation columns among the predictors
+
+All self-checks passed.
+
+=== SECTION 14.5 ablation [263s] ===
+Full            28 features   MdAPE  12.19%   MAE £   114,186
+No crime        26 features   MdAPE  12.31%   MAE £   114,611
+No transport    25 features   MdAPE  12.28%   MAE £   113,689
+No macro        27 features   MdAPE  12.14%   MAE £   113,676
+No market lags  25 features   MdAPE  12.39%   MAE £   115,248
+No prior sales  24 features   MdAPE  13.12%   MAE £   120,337
+    saved figures/c60_ablation.png  [10.   5.5]
+       Variant  Features       R2           MAE          RMSE     MdAPE      MAPE  within_25pct  MdAPE delta
+          Full        28 0.834349 114186.159123 232131.850053 12.192072 17.943069     80.520362     0.000000
+      No crime        26 0.837714 114611.313434 229762.294405 12.305623 18.001868     80.316742     0.113552
+  No transport        25 0.840110 113689.143145 228060.023270 12.278702 18.033758     79.943439     0.086630
+      No macro        27 0.839824 113676.080079 228264.024860 12.138536 17.867539     80.407240    -0.053535
+No market lags        25 0.832253 115247.523859 233595.849753 12.392954 17.922317     80.226244     0.200882
+No prior sales        24 0.830653 120337.015138 234707.442948 13.118905 19.377860     77.952489     0.926834
+
+=== SECTION 14.5 crime resolution [336s] ===
+  seed 42  No crime                       0 cols   MdAPE 12.306%
+  seed 42  Borough count (status quo)     2 cols   MdAPE 12.247%
+  seed 42  LSOA total                     1 cols   MdAPE 12.057%
+  seed 42  LSOA by category               4 cols   MdAPE 12.048%
+  seed 42  LSOA + density                 5 cols   MdAPE 12.074%
+  seed 42  Borough + LSOA                 7 cols   MdAPE 12.048%
+  seed 43  No crime                       0 cols   MdAPE 11.993%
+  seed 43  Borough count (status quo)     2 cols   MdAPE 12.197%
+  seed 43  LSOA total                     1 cols   MdAPE 12.147%
+  seed 43  LSOA by category               4 cols   MdAPE 12.191%
+  seed 43  LSOA + density                 5 cols   MdAPE 12.068%
+  seed 43  Borough + LSOA                 7 cols   MdAPE 12.269%
+  seed 44  No crime                       0 cols   MdAPE 12.055%
+  seed 44  Borough count (status quo)     2 cols   MdAPE 12.030%
+  seed 44  LSOA total                     1 cols   MdAPE 12.105%
+  seed 44  LSOA by category               4 cols   MdAPE 11.920%
+  seed 44  LSOA + density                 5 cols   MdAPE 12.069%
+  seed 44  Borough + LSOA                 7 cols   MdAPE 12.021%
+  seed 45  No crime                       0 cols   MdAPE 12.240%
+  seed 45  Borough count (status quo)     2 cols   MdAPE 12.076%
+  seed 45  LSOA total                     1 cols   MdAPE 12.072%
+  seed 45  LSOA by category               4 cols   MdAPE 12.240%
+  seed 45  LSOA + density                 5 cols   MdAPE 12.176%
+  seed 45  Borough + LSOA                 7 cols   MdAPE 12.088%
+  seed 46  No crime                       0 cols   MdAPE 12.171%
+  seed 46  Borough count (status quo)     2 cols   MdAPE 12.130%
+  seed 46  LSOA total                     1 cols   MdAPE 12.062%
+  seed 46  LSOA by category               4 cols   MdAPE 11.944%
+  seed 46  LSOA + density                 5 cols   MdAPE 12.267%
+  seed 46  Borough + LSOA                 7 cols   MdAPE 12.113%
+            Crime features  Columns  MdAPE mean  MdAPE sd  Gain vs. no crime  Gain sd  Seeds won  Seeds
+                  No crime        0   12.152894  0.128789           0.000000 0.000000          0      5
+Borough count (status quo)        2   12.136108  0.088232           0.016785 0.135125          4      5
+                LSOA total        1   12.088674  0.037874           0.064219 0.164126          3      5
+          LSOA by category        4   12.068510  0.143374           0.084384 0.186986          3      5
+            LSOA + density        5   12.130726  0.088922           0.022168 0.132653          2      5
+            Borough + LSOA        7   12.107722  0.096892           0.045172 0.199973          4      5
+
+=== SECTION 14.6 prior sale [709s] ===
+  seed 42  No prior sale                  0 cols   MdAPE 13.119%
+  seed 42  Prior price only               2 cols   MdAPE 12.691%
+  seed 42  Prior price + elapsed          4 cols   MdAPE 12.192%
+  seed 42  Full prior-sale group          6 cols   MdAPE 12.297%
+  seed 43  No prior sale                  0 cols   MdAPE 12.952%
+  seed 43  Prior price only               2 cols   MdAPE 12.549%
+  seed 43  Prior price + elapsed          4 cols   MdAPE 12.162%
+  seed 43  Full prior-sale group          6 cols   MdAPE 12.132%
+  seed 44  No prior sale                  0 cols   MdAPE 13.076%
+  seed 44  Prior price only               2 cols   MdAPE 12.549%
+  seed 44  Prior price + elapsed          4 cols   MdAPE 12.055%
+  seed 44  Full prior-sale group          6 cols   MdAPE 12.037%
+  Prior-sale features  Columns  MdAPE mean  MdAPE sd  Gain vs. no prior sale  Gain sd  Seeds won  Seeds
+        No prior sale        0   13.049258  0.086480                0.000000 0.000000          0      3
+     Prior price only        2   12.596445  0.081878                0.452813 0.065421          3      3
+Prior price + elapsed        4   12.136050  0.072228                0.913208 0.116083          3      3
+Full prior-sale group        6   12.155307  0.131591                0.893951 0.125857          3      3
+
+=== DONE in 852s ===

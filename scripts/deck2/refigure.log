@@ -1,0 +1,77 @@
+Loaded 4 sources in 13.3s
+   houses          418,201 rows x 14 cols  (   225 MB)
+   crime        13,490,604 rows x  4 cols  (   108 MB)
+   boe                 246 rows x  2 cols  (     0 MB)
+   stations            471 rows x 14 cols  (     0 MB)
+LSOA boundaries (cached): 5,901 areas
+Houses: 82,122 rows in 2008-2016 -> 79,815 with size data
+Crime: 3,564 borough-months, 33 boroughs
+Rates: 3,288 days, 0.25% - 5.50%
+LSOA crime: 522,180 LSOA-months, 4,835 LSOAs, 4 category groups
+   median crime per LSOA-month: 9 total, 1 burglary -- sparse, which is why the 12-month window leads
+Loaded cached master table: (59946, 37)
+master (59946, 37) [97s]
+    c18_price_clip.png [13.  5.]
+    c20_property_chars.png [16. 12.]
+    c23a_tube_premium.png [13.   5.5]
+    c23b_crime_and_market_0.png [13.  5.]
+    c23b_crime_and_market_1.png [13.  8.]
+    c23c_price_vs_area.png [11.  7.]
+    c23d_borough_sqm.png [11. 10.]
+LSOA price summary: 2,562 of 2,863 LSOAs with >= 5 sales
+Both maps run darkest in the centre. That is the confound the next figure removes: central London is simultaneously the most expensive and the most crime-recording part of the city, so a raw crime-price correlation largely measures centrality.
+    c26_lsoa_maps.png [16.  8.]
+Across boroughs r = +0.30; within borough r = +0.00.
+    c28_within_borough.png [15.  6.]
+Correlation between crime change and price growth: r = -0.01 over 863 LSOAs.
+    c29_crime_change.png [11.  7.]
+EDA figures done [115s]
+    c60_ablation.png [10.   5.5]
+Sale history: 418,201 rows -> 315,674 after exact duplicates (102,527 removed, 24.5%)
+   779 same-day price conflicts collapsed to their median
+   314,895 sales across 137,760 addresses; 66.0% of addresses sold more than once (1995 to 2024)
+Prior-sale features: 36,609 of 59,946 rows (61.1%) have an earlier sale of the same property
+   years since that sale: median 6.9 (p10 2.2, p90 13.8)
+train  35,967 rows   2008-01-01 -> 2014-04-17
+val     8,991 rows   2014-04-17 -> 2015-04-30
+calib   5,994 rows   2015-04-30 -> 2015-12-17
+test    8,994 rows   2015-12-17 -> 2016-12-31
+raw       35,967 training rows
+capped    35,693 training rows
+cleaned   35,075 training rows
+
+IsolationForest scored 30,853 of 35,693 capped training rows (4,840 skipped for missing values, kept as-is) and flagged 618 anomalies (2% target rate); validation and test are untouched.
+--- Baseline ---
+Ridge (baseline)                  val   MdAPE  17.09%   MAE £   163,715   R2  0.539
+
+--- Single gradient-boosted models ---
+XGBoost (raw)                     val   MdAPE  13.88%   MAE £   126,418   R2  0.787
+XGBoost (capped)                  val   MdAPE  14.33%   MAE £   126,492   R2  0.813
+XGBoost (cleaned)                 val   MdAPE  14.60%   MAE £   137,929   R2  0.750
+CatBoost (cleaned)                val   MdAPE  13.20%   MAE £   123,849   R2  0.800
+
+--- Detrended gradient-boosted models (section 12.1) ---
+XGBoost detrended-market (capped) val   MdAPE  12.19%   MAE £   114,186   R2  0.834
+CatBoost detrended-market (cleaned)val   MdAPE  11.94%   MAE £   115,177   R2  0.824
+XGBoost detrended-borough (capped)val   MdAPE  12.98%   MAE £   118,293   R2  0.830
+CatBoost detrended-borough (cleaned)val   MdAPE  12.63%   MAE £   118,386   R2  0.819
+
+--- Mixture of Experts ---
+   luxury router: temperature 0.835, 3,001 luxury / 32,074 standard training rows
+MoE - luxury routing (XGB)        val   MdAPE  14.05%   MAE £   137,102   R2  0.751
+3-seed average (XGB)              val   MdAPE  14.23%   MAE £   134,327   R2  0.763
+3-seed average (CatBoost)         val   MdAPE  13.26%   MAE £   122,881   R2  0.807
+
+--- Mixture of Experts on the best recipe (detrended, section 12.1) ---
+   luxury router: temperature 0.763, 3,541 luxury / 32,152 standard training rows
+MoE - luxury routing detrended (XGB)val   MdAPE  12.49%   MAE £   120,442   R2  0.817
+3-seed average detrended (XGB)    val   MdAPE  12.12%   MAE £   114,888   R2  0.834
+
+Trained 14 models in 2451s
+    c48_leaderboard.png [16.  6.]
+Calibrated on 5,916 properties
+Safety multiplier q_10 = 0.7674
+Interpretation: floor = prediction x 76.74%, expected to hold for 90% of properties
+CHECK q=0.767365 coverage=86.61% flips=1186 (13.39%) median_margin=66,124
+    c73_flip_margins.png [16.  6.]
+DONE [2588s]

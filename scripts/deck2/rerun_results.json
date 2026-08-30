@@ -1,0 +1,798 @@
+{
+  "config": {
+    "train_frac": 0.6,
+    "val_frac": 0.15,
+    "calib_frac": 0.1,
+    "test_frac": 0.15,
+    "price_cap": 4000000.0,
+    "conformal_alpha": 0.1,
+    "seed": 42
+  },
+  "crime_partial": "      lsoa_code         borough    median_sqm  crime_density   log_sqm  log_crime  log_sqm_demeaned  log_crime_demeaned\n0     E01000001  CITY OF LONDON   9140.499195      29.945555  9.120470   3.399381          0.032119           -0.190142\n1     E01000002  CITY OF LONDON  11086.017282      24.808142  9.313440   3.211172          0.225089           -0.378351\n2     E01000003  CITY OF LONDON   7843.750000      58.326683  8.967472   4.066060         -0.120879            0.476536\n3     E01000005  CITY OF LONDON   7730.158730      72.090050  8.952885   4.277916         -0.135466            0.688393\n4     E01000115          BARNET   4816.666667     176.367592  8.479837   5.172570          0.116818           -0.619454\n...         ...             ...           ...            ...       ...        ...               ...                 ...\n2557  E01033742       GREENWICH   3201.923077     244.619973  8.071507   5.499706          0.027549           -0.556540\n2558  E01033743       GREENWICH   3063.589744     160.268932  8.027343   5.076853         -0.016615           -0.979393\n2559  E01033744       GREENWICH   2458.839406     378.140306  7.807445   5.935265         -0.236513           -0.120981\n2560  E01033745       GREENWICH   2741.228070     106.581615  7.916161   4.668911         -0.127796           -1.387335\n2561  E01033746       GREENWICH   5469.696970     287.817702  8.606978   5.662327          0.563021           -0.393919\n\n[2562 rows x 8 columns]",
+  "crime_differenced": "      lsoa_code     sqm_early  n_sqm_early      sqm_late  n_sqm_late  crime_early  n_crime_early  crime_late  n_crime_late  price_growth  crime_change\n18    E01000142   3625.000000            5   5971.405229           6          9.0             36         7.5            36      0.647284     -0.166667\n26    E01000157   2647.058824            7   5494.877049          12          4.0             36         7.0            36      1.075842      0.750000\n27    E01000158   2992.327366            6   4160.583942           5          8.0             36         7.0            36      0.390417     -0.125000\n29    E01000160   4169.636493            8   4965.517241          11         14.0             36        13.0            36      0.190875     -0.071429\n36    E01000177   4296.959459            6   6746.031746          15          7.0             36         6.0            36      0.569955     -0.142857\n...         ...           ...          ...           ...         ...          ...            ...         ...           ...           ...           ...\n2350  E01004760   4692.307692            7  11260.088781          16         10.5             36         8.0            36      1.399691     -0.238095\n2351  E01004761  11677.489177           88  23942.307692         131        146.5             36       115.0            36      1.050296     -0.215017\n2352  E01004762  11996.644295           49  23469.387755          65        164.0             36        91.0            36      0.956329     -0.445122\n2353  E01004763   8333.333333           23  18055.555556         287        436.5             36       308.0            36      1.166667     -0.294387\n2354  E01004765   7636.363636           43  14444.444444          59        134.5             36       121.5            36      0.891534     -0.096654\n\n[863 rows x 11 columns]",
+  "bias_val": [
+    {
+      "Model": "XGBoost (capped)",
+      "Mean residual (val)": 74678.97612680288,
+      "Median residual": 38198.359375,
+      "Under-predicted %": 70.35067873303169
+    },
+    {
+      "Model": "XGBoost detrended-market (capped)",
+      "Mean residual (val)": 24330.695279194213,
+      "Median residual": 8625.82550880313,
+      "Under-predicted %": 54.79638009049774
+    },
+    {
+      "Model": "Ridge (baseline)",
+      "Mean residual (val)": 51753.8664429875,
+      "Median residual": 36073.016178289516,
+      "Under-predicted %": 65.55429864253394
+    }
+  ],
+  "val_board": [
+    {
+      "Model": "CatBoost detrended-market (cleaned)",
+      "Trained on": "cleaned",
+      "Split": "val",
+      "R2": 0.8240805485693097,
+      "MAE": 115176.83201367545,
+      "RMSE": 239218.64019806677,
+      "MdAPE": 11.938959104842912,
+      "MAPE": 17.725697033195452,
+      "within_25pct": 80.83710407239819
+    },
+    {
+      "Model": "3-seed average detrended (XGB)",
+      "Trained on": "capped",
+      "Split": "val",
+      "R2": 0.8339688484882144,
+      "MAE": 114887.71355889893,
+      "RMSE": 232398.2622507236,
+      "MdAPE": 12.122027490165562,
+      "MAPE": 17.90716611302747,
+      "within_25pct": 80.31674208144797
+    },
+    {
+      "Model": "XGBoost detrended-market (capped)",
+      "Trained on": "capped",
+      "Split": "val",
+      "R2": 0.8343492934212672,
+      "MAE": 114186.15912277292,
+      "RMSE": 232131.85005286953,
+      "MdAPE": 12.1920716461963,
+      "MAPE": 17.943069032365862,
+      "within_25pct": 80.52036199095024
+    },
+    {
+      "Model": "MoE - luxury routing detrended (XGB)",
+      "Trained on": "capped",
+      "Split": "val",
+      "R2": 0.817026678124745,
+      "MAE": 120442.12921937987,
+      "RMSE": 243967.49821138193,
+      "MdAPE": 12.487507590145253,
+      "MAPE": 18.595519759198123,
+      "within_25pct": 78.98190045248869
+    },
+    {
+      "Model": "CatBoost detrended-borough (cleaned)",
+      "Trained on": "cleaned",
+      "Split": "val",
+      "R2": 0.8188273312750424,
+      "MAE": 118385.83473439004,
+      "RMSE": 242764.07962481343,
+      "MdAPE": 12.630900029052693,
+      "MAPE": 17.897055011618328,
+      "within_25pct": 80.80316742081448
+    },
+    {
+      "Model": "XGBoost detrended-borough (capped)",
+      "Trained on": "capped",
+      "Split": "val",
+      "R2": 0.8303072799868418,
+      "MAE": 118292.58660564969,
+      "RMSE": 234946.8852523455,
+      "MdAPE": 12.977351263205684,
+      "MAPE": 18.636415639293496,
+      "within_25pct": 79.19683257918551
+    },
+    {
+      "Model": "CatBoost (cleaned)",
+      "Trained on": "cleaned",
+      "Split": "val",
+      "R2": 0.7998472793134859,
+      "MAE": 123849.12580360023,
+      "RMSE": 255163.66724489993,
+      "MdAPE": 13.19756137220951,
+      "MAPE": 17.9713036603956,
+      "within_25pct": 79.29864253393664
+    },
+    {
+      "Model": "3-seed average (CatBoost)",
+      "Trained on": "cleaned",
+      "Split": "val",
+      "R2": 0.8065102994302147,
+      "MAE": 122881.38331928334,
+      "RMSE": 250880.56126007432,
+      "MdAPE": 13.256281077232302,
+      "MAPE": 18.066739525097393,
+      "within_25pct": 79.41176470588235
+    },
+    {
+      "Model": "XGBoost (raw)",
+      "Trained on": "raw",
+      "Split": "val",
+      "R2": 0.7873362131846426,
+      "MAE": 126418.37758325085,
+      "RMSE": 263017.6285912175,
+      "MdAPE": 13.87980907707911,
+      "MAPE": 18.557076194918036,
+      "within_25pct": 78.35972850678733
+    },
+    {
+      "Model": "MoE - luxury routing (XGB)",
+      "Trained on": "cleaned",
+      "Split": "val",
+      "R2": 0.751490166972556,
+      "MAE": 137102.3698765395,
+      "RMSE": 284321.6135340014,
+      "MdAPE": 14.05248195075697,
+      "MAPE": 18.73798810933504,
+      "within_25pct": 77.13800904977376
+    },
+    {
+      "Model": "3-seed average (XGB)",
+      "Trained on": "cleaned",
+      "Split": "val",
+      "R2": 0.7631655293875705,
+      "MAE": 134327.46635057268,
+      "RMSE": 277562.3417064477,
+      "MdAPE": 14.229349857954542,
+      "MAPE": 18.526133364108034,
+      "within_25pct": 77.66968325791855
+    },
+    {
+      "Model": "XGBoost (capped)",
+      "Trained on": "capped",
+      "Split": "val",
+      "R2": 0.8130479907942023,
+      "MAE": 126492.44127456872,
+      "RMSE": 246605.7251099682,
+      "MdAPE": 14.328339694706498,
+      "MAPE": 18.420285339526053,
+      "within_25pct": 77.9185520361991
+    },
+    {
+      "Model": "XGBoost (cleaned)",
+      "Trained on": "cleaned",
+      "Split": "val",
+      "R2": 0.749712702004943,
+      "MAE": 137929.3129418835,
+      "RMSE": 285336.60608347686,
+      "MdAPE": 14.595179330065362,
+      "MAPE": 18.763189094853676,
+      "within_25pct": 76.56108597285068
+    },
+    {
+      "Model": "Ridge (baseline)",
+      "Trained on": "capped",
+      "Split": "val",
+      "R2": 0.5389744182747063,
+      "MAE": 163714.92044438448,
+      "RMSE": 387258.17867108545,
+      "MdAPE": 17.092624153291354,
+      "MAPE": 22.703880475790573,
+      "within_25pct": 68.72171945701358
+    }
+  ],
+  "best_name": "CatBoost detrended-market (cleaned)",
+  "test_board": [
+    {
+      "Model": "3-seed average detrended (XGB)",
+      "Trained on": "capped",
+      "Split": "test",
+      "R2": 0.8030826840216456,
+      "MAE": 131587.1789377511,
+      "RMSE": 244271.318863914,
+      "MdAPE": 13.624444231111903,
+      "MAPE": 21.719940063405442,
+      "within_25pct": 76.81453888700757
+    },
+    {
+      "Model": "XGBoost detrended-market (capped)",
+      "Trained on": "capped",
+      "Split": "test",
+      "R2": 0.7936821693802546,
+      "MAE": 133597.19656021002,
+      "RMSE": 250033.90561440657,
+      "MdAPE": 13.876396434320567,
+      "MAPE": 21.871365104672222,
+      "within_25pct": 76.65650750649058
+    },
+    {
+      "Model": "CatBoost detrended-market (cleaned)",
+      "Trained on": "cleaned",
+      "Split": "test",
+      "R2": 0.7939076944679608,
+      "MAE": 133011.5869212947,
+      "RMSE": 249897.21278381214,
+      "MdAPE": 13.876574845656084,
+      "MAPE": 21.899522023019642,
+      "within_25pct": 76.55491590472965
+    },
+    {
+      "Model": "MoE - luxury routing detrended (XGB)",
+      "Trained on": "capped",
+      "Split": "test",
+      "R2": 0.7982468516848302,
+      "MAE": 135590.456882324,
+      "RMSE": 247252.49555917652,
+      "MdAPE": 14.312795594160866,
+      "MAPE": 22.74154259002315,
+      "within_25pct": 75.0874816570719
+    },
+    {
+      "Model": "XGBoost detrended-borough (capped)",
+      "Trained on": "capped",
+      "Split": "test",
+      "R2": 0.8126053010377381,
+      "MAE": 128270.76993001209,
+      "RMSE": 238291.84185286693,
+      "MdAPE": 14.319935982268724,
+      "MAPE": 20.827688147806786,
+      "within_25pct": 77.98848628513376
+    },
+    {
+      "Model": "CatBoost detrended-borough (cleaned)",
+      "Trained on": "cleaned",
+      "Split": "test",
+      "R2": 0.802756338114007,
+      "MAE": 133805.5475380389,
+      "RMSE": 244473.6472980788,
+      "MdAPE": 16.000268246989478,
+      "MAPE": 21.34101896600575,
+      "within_25pct": 74.36505248899424
+    },
+    {
+      "Model": "Ridge (baseline)",
+      "Trained on": "capped",
+      "Split": "test",
+      "R2": -180.11757989316868,
+      "MAE": 247612.4949681389,
+      "RMSE": 7408168.069896197,
+      "MdAPE": 16.62400955914702,
+      "MAPE": 36.84336817821557,
+      "within_25pct": 70.16593294954284
+    },
+    {
+      "Model": "CatBoost (cleaned)",
+      "Trained on": "cleaned",
+      "Split": "test",
+      "R2": 0.7915208360680801,
+      "MAE": 142471.78533656616,
+      "RMSE": 251340.13950125422,
+      "MdAPE": 18.03093401490826,
+      "MAPE": 22.32891094249638,
+      "within_25pct": 68.96940963991422
+    },
+    {
+      "Model": "3-seed average (CatBoost)",
+      "Trained on": "cleaned",
+      "Split": "test",
+      "R2": 0.7959562000150546,
+      "MAE": 142693.06585503352,
+      "RMSE": 248652.15352397424,
+      "MdAPE": 18.4690321926671,
+      "MAPE": 22.613735161139225,
+      "within_25pct": 67.795462241788
+    },
+    {
+      "Model": "MoE - luxury routing (XGB)",
+      "Trained on": "cleaned",
+      "Split": "test",
+      "R2": 0.7236319501867043,
+      "MAE": 159358.06372224004,
+      "RMSE": 289383.95005593024,
+      "MdAPE": 18.98936922692113,
+      "MAPE": 23.04455564417601,
+      "within_25pct": 66.09098092335478
+    },
+    {
+      "Model": "XGBoost (raw)",
+      "Trained on": "raw",
+      "Split": "test",
+      "R2": 0.752249081253659,
+      "MAE": 154835.48118262502,
+      "RMSE": 273992.17524117435,
+      "MdAPE": 19.567558262711866,
+      "MAPE": 23.57859744370471,
+      "within_25pct": 65.1089287729992
+    },
+    {
+      "Model": "3-seed average (XGB)",
+      "Trained on": "cleaned",
+      "Split": "test",
+      "R2": 0.7056936140362303,
+      "MAE": 162207.3481814045,
+      "RMSE": 298627.8903910958,
+      "MdAPE": 19.746571180555556,
+      "MAPE": 23.460382978955334,
+      "within_25pct": 63.709222259848744
+    },
+    {
+      "Model": "XGBoost (capped)",
+      "Trained on": "capped",
+      "Split": "test",
+      "R2": 0.7497644651566708,
+      "MAE": 157855.92937708122,
+      "RMSE": 275362.63853187725,
+      "MdAPE": 19.916926136363635,
+      "MAPE": 23.66381637102651,
+      "within_25pct": 63.95755728637543
+    },
+    {
+      "Model": "XGBoost (cleaned)",
+      "Trained on": "cleaned",
+      "Split": "test",
+      "R2": 0.7043494546027026,
+      "MAE": 165254.2055051713,
+      "RMSE": 299309.0618422071,
+      "MdAPE": 20.252554611650485,
+      "MAPE": 23.875878306779615,
+      "within_25pct": 62.53527486172254
+    }
+  ],
+  "comparison": [
+    {
+      "Model": "3-seed average detrended (XGB)",
+      "MdAPE (val)": 12.122027490165562,
+      "MAE (val)": 114887.71355889893,
+      "MdAPE (test)": 13.624444231111903,
+      "MAE (test)": 131587.1789377511,
+      "MdAPE drift": 1.502416740946341
+    },
+    {
+      "Model": "XGBoost detrended-market (capped)",
+      "MdAPE (val)": 12.1920716461963,
+      "MAE (val)": 114186.15912277292,
+      "MdAPE (test)": 13.876396434320567,
+      "MAE (test)": 133597.19656021002,
+      "MdAPE drift": 1.6843247881242664
+    },
+    {
+      "Model": "CatBoost detrended-market (cleaned)",
+      "MdAPE (val)": 11.938959104842912,
+      "MAE (val)": 115176.83201367545,
+      "MdAPE (test)": 13.876574845656084,
+      "MAE (test)": 133011.5869212947,
+      "MdAPE drift": 1.9376157408131718
+    },
+    {
+      "Model": "MoE - luxury routing detrended (XGB)",
+      "MdAPE (val)": 12.487507590145253,
+      "MAE (val)": 120442.12921937987,
+      "MdAPE (test)": 14.312795594160866,
+      "MAE (test)": 135590.456882324,
+      "MdAPE drift": 1.8252880040156132
+    },
+    {
+      "Model": "XGBoost detrended-borough (capped)",
+      "MdAPE (val)": 12.977351263205684,
+      "MAE (val)": 118292.58660564969,
+      "MdAPE (test)": 14.319935982268724,
+      "MAE (test)": 128270.76993001209,
+      "MdAPE drift": 1.3425847190630407
+    },
+    {
+      "Model": "CatBoost detrended-borough (cleaned)",
+      "MdAPE (val)": 12.630900029052693,
+      "MAE (val)": 118385.83473439004,
+      "MdAPE (test)": 16.000268246989478,
+      "MAE (test)": 133805.5475380389,
+      "MdAPE drift": 3.3693682179367848
+    },
+    {
+      "Model": "Ridge (baseline)",
+      "MdAPE (val)": 17.092624153291354,
+      "MAE (val)": 163714.92044438448,
+      "MdAPE (test)": 16.62400955914702,
+      "MAE (test)": 247612.4949681389,
+      "MdAPE drift": -0.46861459414433426
+    },
+    {
+      "Model": "CatBoost (cleaned)",
+      "MdAPE (val)": 13.19756137220951,
+      "MAE (val)": 123849.12580360023,
+      "MdAPE (test)": 18.03093401490826,
+      "MAE (test)": 142471.78533656616,
+      "MdAPE drift": 4.833372642698752
+    },
+    {
+      "Model": "3-seed average (CatBoost)",
+      "MdAPE (val)": 13.256281077232302,
+      "MAE (val)": 122881.38331928334,
+      "MdAPE (test)": 18.4690321926671,
+      "MAE (test)": 142693.06585503352,
+      "MdAPE drift": 5.2127511154347985
+    },
+    {
+      "Model": "MoE - luxury routing (XGB)",
+      "MdAPE (val)": 14.05248195075697,
+      "MAE (val)": 137102.3698765395,
+      "MdAPE (test)": 18.98936922692113,
+      "MAE (test)": 159358.06372224004,
+      "MdAPE drift": 4.9368872761641605
+    },
+    {
+      "Model": "XGBoost (raw)",
+      "MdAPE (val)": 13.87980907707911,
+      "MAE (val)": 126418.37758325085,
+      "MdAPE (test)": 19.567558262711866,
+      "MAE (test)": 154835.48118262502,
+      "MdAPE drift": 5.687749185632757
+    },
+    {
+      "Model": "3-seed average (XGB)",
+      "MdAPE (val)": 14.229349857954542,
+      "MAE (val)": 134327.46635057268,
+      "MdAPE (test)": 19.746571180555556,
+      "MAE (test)": 162207.3481814045,
+      "MdAPE drift": 5.517221322601014
+    },
+    {
+      "Model": "XGBoost (capped)",
+      "MdAPE (val)": 14.328339694706498,
+      "MAE (val)": 126492.44127456872,
+      "MdAPE (test)": 19.916926136363635,
+      "MAE (test)": 157855.92937708122,
+      "MdAPE drift": 5.588586441657137
+    },
+    {
+      "Model": "XGBoost (cleaned)",
+      "MdAPE (val)": 14.595179330065362,
+      "MAE (val)": 137929.3129418835,
+      "MdAPE (test)": 20.252554611650485,
+      "MAE (test)": 165254.2055051713,
+      "MdAPE drift": 5.657375281585123
+    }
+  ],
+  "repeat_property": [
+    {
+      "Test subset": "Seen in training",
+      "Rows": 2112,
+      "MdAPE": 12.754432458466805,
+      "MAE": 118212.22759203873,
+      "R2": 0.8080468372366715,
+      "within_25pct": 79.9715909090909
+    },
+    {
+      "Test subset": "Unseen property",
+      "Rows": 6747,
+      "MdAPE": 14.29860669219016,
+      "MAE": 137644.20095766473,
+      "R2": 0.790560230683202,
+      "within_25pct": 75.48540091892693
+    }
+  ],
+  "transform_comparison": [
+    {
+      "Backend": "XGBoost",
+      "Target transform": "regular",
+      "Validation MdAPE": 14.328339694706498,
+      "Test MdAPE": 19.916926136363635,
+      "Test MAE": 157855.92937708122
+    },
+    {
+      "Backend": "XGBoost",
+      "Target transform": "market-wide",
+      "Validation MdAPE": 12.1920716461963,
+      "Test MdAPE": 13.876396434320567,
+      "Test MAE": 133597.19656021002
+    },
+    {
+      "Backend": "XGBoost",
+      "Target transform": "borough-scaled",
+      "Validation MdAPE": 12.977351263205684,
+      "Test MdAPE": 14.319935982268724,
+      "Test MAE": 128270.76993001209
+    },
+    {
+      "Backend": "CatBoost",
+      "Target transform": "regular",
+      "Validation MdAPE": 13.19756137220951,
+      "Test MdAPE": 18.03093401490826,
+      "Test MAE": 142471.78533656616
+    },
+    {
+      "Backend": "CatBoost",
+      "Target transform": "market-wide",
+      "Validation MdAPE": 11.938959104842912,
+      "Test MdAPE": 13.876574845656084,
+      "Test MAE": 133011.5869212947
+    },
+    {
+      "Backend": "CatBoost",
+      "Target transform": "borough-scaled",
+      "Validation MdAPE": 12.630900029052693,
+      "Test MdAPE": 16.000268246989478,
+      "Test MAE": 133805.5475380389
+    }
+  ],
+  "section15": {
+    "q_safety": 0.7673652174227661,
+    "target": 90.0,
+    "coverage": 86.61248447906085,
+    "coverage_gap": -3.3875155209391465,
+    "n_scanned": 8859,
+    "n_flips": 1186,
+    "flip_rate": 13.387515520939159,
+    "median_margin": 66123.57708777109,
+    "top10": [
+      {
+        "borough": "WESTMINSTER",
+        "date": "2016-09-06 00:00:00",
+        "predicted_value": 4313597.834610798,
+        "safe_lower_bound": 3310104.9402304883,
+        "actual_price": 725000.0,
+        "is_flip": true,
+        "margin": 2585104.9402304883
+      },
+      {
+        "borough": "WESTMINSTER",
+        "date": "2016-09-02 00:00:00",
+        "predicted_value": 3966466.3360644765,
+        "safe_lower_bound": 3043728.3023741995,
+        "actual_price": 760000.0,
+        "is_flip": true,
+        "margin": 2283728.3023741995
+      },
+      {
+        "borough": "WESTMINSTER",
+        "date": "2016-03-31 00:00:00",
+        "predicted_value": 4141389.0121007855,
+        "safe_lower_bound": 3177957.8797029736,
+        "actual_price": 1175000.0,
+        "is_flip": true,
+        "margin": 2002957.8797029736
+      },
+      {
+        "borough": "KENSINGTON AND CHELSEA",
+        "date": "2016-08-31 00:00:00",
+        "predicted_value": 3284724.61008993,
+        "safe_lower_bound": 2520583.4145955695,
+        "actual_price": 900000.0,
+        "is_flip": true,
+        "margin": 1620583.4145955695
+      },
+      {
+        "borough": "KENSINGTON AND CHELSEA",
+        "date": "2016-12-09 00:00:00",
+        "predicted_value": 2959968.395443198,
+        "safe_lower_bound": 2271376.7913337857,
+        "actual_price": 690000.0,
+        "is_flip": true,
+        "margin": 1581376.7913337857
+      },
+      {
+        "borough": "WESTMINSTER",
+        "date": "2016-11-08 00:00:00",
+        "predicted_value": 2215580.6127826595,
+        "safe_lower_bound": 1700159.498645631,
+        "actual_price": 470000.0,
+        "is_flip": true,
+        "margin": 1230159.498645631
+      },
+      {
+        "borough": "WESTMINSTER",
+        "date": "2016-11-23 00:00:00",
+        "predicted_value": 1918416.9090204772,
+        "safe_lower_bound": 1472126.4084980094,
+        "actual_price": 250000.0,
+        "is_flip": true,
+        "margin": 1222126.4084980094
+      },
+      {
+        "borough": "WESTMINSTER",
+        "date": "2016-11-23 00:00:00",
+        "predicted_value": 1900953.3260616406,
+        "safe_lower_bound": 1458725.4623638212,
+        "actual_price": 240000.0,
+        "is_flip": true,
+        "margin": 1218725.4623638212
+      },
+      {
+        "borough": "WESTMINSTER",
+        "date": "2016-04-08 00:00:00",
+        "predicted_value": 3625543.6120679844,
+        "safe_lower_bound": 2782116.0621502697,
+        "actual_price": 1576250.0,
+        "is_flip": true,
+        "margin": 1205866.0621502697
+      },
+      {
+        "borough": "KENSINGTON AND CHELSEA",
+        "date": "2016-01-22 00:00:00",
+        "predicted_value": 3436430.0193974776,
+        "safe_lower_bound": 2636996.868993066,
+        "actual_price": 1500000.0,
+        "is_flip": true,
+        "margin": 1136996.8689930658
+      }
+    ]
+  },
+  "self_checks": "passed",
+  "ablation": [
+    {
+      "Variant": "Full",
+      "Features": 28,
+      "R2": 0.8343492934212672,
+      "MAE": 114186.15912277292,
+      "RMSE": 232131.85005286953,
+      "MdAPE": 12.1920716461963,
+      "MAPE": 17.943069032365862,
+      "within_25pct": 80.52036199095024,
+      "MdAPE delta": 0.0
+    },
+    {
+      "Variant": "No crime",
+      "Features": 26,
+      "R2": 0.8377138915288364,
+      "MAE": 114611.3134337617,
+      "RMSE": 229762.2944050502,
+      "MdAPE": 12.305623236453641,
+      "MAPE": 18.001868188291432,
+      "within_25pct": 80.31674208144797,
+      "MdAPE delta": 0.11355159025734096
+    },
+    {
+      "Variant": "No transport",
+      "Features": 25,
+      "R2": 0.8401096857993233,
+      "MAE": 113689.14314490769,
+      "RMSE": 228060.02326993775,
+      "MdAPE": 12.278701713332882,
+      "MAPE": 18.033757745248685,
+      "within_25pct": 79.94343891402715,
+      "MdAPE delta": 0.08663006713658206
+    },
+    {
+      "Variant": "No macro",
+      "Features": 27,
+      "R2": 0.8398235114291897,
+      "MAE": 113676.08007857909,
+      "RMSE": 228264.02485963496,
+      "MdAPE": 12.138536458813261,
+      "MAPE": 17.867539310468732,
+      "within_25pct": 80.40723981900453,
+      "MdAPE delta": -0.053535187383038974
+    },
+    {
+      "Variant": "No market lags",
+      "Features": 25,
+      "R2": 0.8322532663661842,
+      "MAE": 115247.52385910657,
+      "RMSE": 233595.8497531405,
+      "MdAPE": 12.392953709027493,
+      "MAPE": 17.922317323032647,
+      "within_25pct": 80.22624434389141,
+      "MdAPE delta": 0.2008820628311927
+    },
+    {
+      "Variant": "No prior sales",
+      "Features": 24,
+      "R2": 0.8306529828998825,
+      "MAE": 120337.01513779737,
+      "RMSE": 234707.4429483771,
+      "MdAPE": 13.11890524746467,
+      "MAPE": 19.377859742569363,
+      "within_25pct": 77.9524886877828,
+      "MdAPE delta": 0.9268336012683704
+    }
+  ],
+  "crime_designs": [
+    {
+      "Crime features": "No crime",
+      "Columns": 0,
+      "MdAPE mean": 12.152893541661065,
+      "MdAPE sd": 0.12878891433601253,
+      "Gain vs. no crime": 0.0,
+      "Gain sd": 0.0,
+      "Seeds won": 0,
+      "Seeds": 5
+    },
+    {
+      "Crime features": "Borough count (status quo)",
+      "Columns": 2,
+      "MdAPE mean": 12.136108315080204,
+      "MdAPE sd": 0.08823208396852725,
+      "Gain vs. no crime": 0.016785226580859812,
+      "Gain sd": 0.13512494798695765,
+      "Seeds won": 4,
+      "Seeds": 5
+    },
+    {
+      "Crime features": "LSOA total",
+      "Columns": 1,
+      "MdAPE mean": 12.088674249277675,
+      "MdAPE sd": 0.03787403302487031,
+      "Gain vs. no crime": 0.06421929238339104,
+      "Gain sd": 0.16412590799926466,
+      "Seeds won": 3,
+      "Seeds": 5
+    },
+    {
+      "Crime features": "LSOA by category",
+      "Columns": 4,
+      "MdAPE mean": 12.068510029076396,
+      "MdAPE sd": 0.14337431544822465,
+      "Gain vs. no crime": 0.08438351258466917,
+      "Gain sd": 0.1869860033013783,
+      "Seeds won": 3,
+      "Seeds": 5
+    },
+    {
+      "Crime features": "LSOA + density",
+      "Columns": 5,
+      "MdAPE mean": 12.130726005667867,
+      "MdAPE sd": 0.08892215037570596,
+      "Gain vs. no crime": 0.022167535993197873,
+      "Gain sd": 0.13265262908151815,
+      "Seeds won": 2,
+      "Seeds": 5
+    },
+    {
+      "Crime features": "Borough + LSOA",
+      "Columns": 7,
+      "MdAPE mean": 12.107721903186105,
+      "MdAPE sd": 0.09689231158439054,
+      "Gain vs. no crime": 0.04517163847496022,
+      "Gain sd": 0.19997281908642972,
+      "Seeds won": 4,
+      "Seeds": 5
+    }
+  ],
+  "crime_noise_floor": 0.09734730145628855,
+  "prior_sale_designs": [
+    {
+      "Prior-sale features": "No prior sale",
+      "Columns": 0,
+      "MdAPE mean": 13.049257846737826,
+      "MdAPE sd": 0.08648018373003176,
+      "Gain vs. no prior sale": 0.0,
+      "Gain sd": 0.0,
+      "Seeds won": 0,
+      "Seeds": 3
+    },
+    {
+      "Prior-sale features": "Prior price only",
+      "Columns": 2,
+      "MdAPE mean": 12.596444977213816,
+      "MdAPE sd": 0.08187766108843197,
+      "Gain vs. no prior sale": 0.4528128695240117,
+      "Gain sd": 0.06542118883068404,
+      "Seeds won": 3,
+      "Seeds": 3
+    },
+    {
+      "Prior-sale features": "Prior price + elapsed",
+      "Columns": 4,
+      "MdAPE mean": 12.136049952967118,
+      "MdAPE sd": 0.07222810443167248,
+      "Gain vs. no prior sale": 0.9132078937707089,
+      "Gain sd": 0.11608284614136596,
+      "Seeds won": 3,
+      "Seeds": 3
+    },
+    {
+      "Prior-sale features": "Full prior-sale group",
+      "Columns": 6,
+      "MdAPE mean": 12.155306549323752,
+      "MdAPE sd": 0.13159096864099662,
+      "Gain vs. no prior sale": 0.8939512974140745,
+      "Gain sd": 0.1258569737739382,
+      "Seeds won": 3,
+      "Seeds": 3
+    }
+  ]
+}
