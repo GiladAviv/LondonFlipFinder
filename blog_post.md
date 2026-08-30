@@ -1,4 +1,4 @@
-# Your gradient boosting isn't broken — your target is
+# I Beat XGBoost With Linear Regression (By Accident)
 
 ### A linear baseline beat XGBoost and CatBoost on 60,000 London property sales. The fix wasn't a better model.
 
