@@ -164,13 +164,11 @@ dict(layout="table", kicker="§4 · THE SOURCES",
            "the signal away. Next slide: what each source has to become before it can join. "
            "Source: notebook cells 9 and 10."),
 # ---------------------------------------------------------------- 8
-dict(layout="bullets", kicker="§5 · CLEANING",
+dict(layout="figure_below", kicker="§5 · CLEANING", figure=F+"new_cleaning_funnel.png",
      title="Each source is reshaped before it is allowed to join",
-     bullets=["Houses: 2008–2016 window, total_rooms = bedrooms + livingRooms",
-              "Crime: summed to borough-months, then rolling(12, closed='left')",
+     bullets=["Crime: summed to borough-months, then rolling(12, closed='left')",
               "Rates: 246 changes expanded to 3,288 daily rows",
-              "**Forward-fill only** — an earlier .bfill() leaked rates backwards",
-              "Leading days stay NaN, never filled from the future"],
+              "**Forward-fill only** — an earlier .bfill() leaked rates backwards"],
      notes="Three independent pure transforms, each taking one raw frame and returning a "
            "tidy one, with no cross-source joining yet. Houses is restricted to the window "
            "and gains total_rooms; rows with neither floor area nor room count are dropped, "
@@ -364,11 +362,10 @@ dict(layout="figure_below", kicker="§8.2 · EDA", figure=F+"c28_within_borough.
            "are appendix slides. This is only the exploratory answer — slide 22 puts the same "
            "question to the fitted model. Source: notebook cells 25 to 30."),
 # ---------------------------------------------------------------- 16
-dict(layout="bullets", kicker="§8.3 & §9 · THE FILE'S OWN HISTORY",
+dict(layout="figure_below", kicker="§8.3 & §9 · THE FILE'S OWN HISTORY",
+     figure=F+"new_repeat_share.png",
      title="The file is a price history, not a transaction list",
-     bullets=["418,201 rows → 314,895 distinct sales, 137,760 addresses",
-              "**61.1 %** of in-window sales have an earlier sale",
-              "Median 6.9 years earlier (p10 2.2, p90 13.8)",
+     bullets=["Median 6.9 years earlier (p10 2.2, p90 13.8)",
               "Four features: prev_sale_price, has_prev_sale, years_since, days_since",
               "merge_asof backward, by fullAddress, allow_exact_matches=False"],
      notes="This is the structural fact none of the charts surface, and it turns out to "
@@ -839,11 +836,10 @@ dict(layout="table", kicker="RESULTS",
            "flagging 1,186 of 8,859. Next slide qualifies all of it. Source: notebook cell "
            "0, with the figures from cells 51, 60, 63 and 71."),
 # ---------------------------------------------------------------- FINAL ANALYSIS
-dict(layout="bullets", kicker="FINAL ANALYSIS",
+dict(layout="figure_below", kicker="FINAL ANALYSIS", figure=F+"new_coverage.png",
      title="Answering the three questions we opened with",
      bullets=["Value: 13.88 % typical error; 75.5 % of unseen within 25 %",
-              "Floor: 86.61 % on test, 88.39 % on a calibration holdout",
-              "Crime: no — at LSOA grain, as a rate",
+              "Crime: no — at LSOA grain, as a rate, split by category",
               "Learned: the file's own history beat any model choice"],
      notes="Close the loop the Initial Questions slide opened, in the same order. Question "
            "one, what is a property worth: the selected model reaches 13.88 % median "

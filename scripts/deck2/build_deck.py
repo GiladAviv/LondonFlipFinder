@@ -25,6 +25,8 @@ RULE = RGBColor(0xD9, 0xD8, 0xD4)
 PANEL = RGBColor(0xF3, 0xF6, 0xFA)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 PAGE = RGBColor(0x9A, 0x99, 0x95)
+BG_TOP = RGBColor(0xFF, 0xFF, 0xFF)     # gradient wash: near-white top-left
+BG_BOT = RGBColor(0xE8, 0xF0, 0xF9)     # to pale blue bottom-right
 
 BODY_FONT = "Calibri"
 MONO_FONT = "Consolas"
@@ -65,8 +67,14 @@ def _emph_runs(p, text, size, color, bold=False):
 def add_slide(prs):
     s = prs.slides.add_slide(prs.slide_layouts[6])
     bg = s.shapes.add_shape(1, 0, 0, Emu(int(SW * 914400)), Emu(int(SH * 914400)))
-    bg.fill.solid()
-    bg.fill.fore_color.rgb = WHITE
+    # Diagonal wash rather than flat white: adds depth without touching contrast.
+    bg.fill.gradient()
+    bg.fill.gradient_angle = 45.0
+    stops = bg.fill.gradient_stops
+    stops[0].color.rgb = BG_TOP
+    stops[0].position = 0.0
+    stops[1].color.rgb = BG_BOT
+    stops[1].position = 1.0
     bg.line.fill.background()
     bg.shadow.inherit = False
     return s
@@ -133,8 +141,12 @@ def picture(s, path, top, max_h, max_w=CW, left=None):
     if ph > max_h:
         ph, pw = max_h, max_h * ar
     lx = left if left is not None else (SW - pw) / 2
-    s.shapes.add_picture(str(ROOT / path), Inches(lx), Inches(top),
-                         Inches(pw), Inches(ph))
+    pic = s.shapes.add_picture(str(ROOT / path), Inches(lx), Inches(top),
+                               Inches(pw), Inches(ph))
+    # The figures are white-background PNGs; on the gradient wash a hairline border
+    # makes them read as deliberate cards rather than floating rectangles.
+    pic.line.color.rgb = RULE
+    pic.line.width = Pt(0.75)
     return top + ph
 
 
